@@ -56,14 +56,14 @@ describe("§5.5 #2 — warmer ⇒ strictly faster quality loss", () => {
 });
 
 describe("§5.5 #3 — λ controls EMA inertia (thermal memory)", () => {
-  // The patented step-2 formula EMA = λ·EMA + (1−λ)·u_t makes λ the
-  // memory-RETENTION weight, so a HIGHER λ responds MORE SLOWLY to a step
-  // change (more inertia). NOTE: the spec's prose for this test reads
-  // "lower λ → slower response", which is inverted relative to the step-2
-  // formula it also specifies; the formula is the patented mechanism (RULE 2)
-  // and matches the physical ordering of the §5.3 λ values (Fish 0.87 reacts
-  // fast, Apple 0.94 is buffered), so we preserve the formula and assert its
-  // true behaviour. Flagged in the Phase 1 report.
+  // RESOLUTION of a spec-internal conflict: §5.5 #3's prose reads "lower λ →
+  // slower EMA response (more inertia)", but the §5.3 step-2 formula it also
+  // specifies, EMA = λ·EMA + (1−λ)·u_t, makes λ the memory-RETENTION weight —
+  // so HIGHER λ responds MORE SLOWLY (more inertia). The formula is the
+  // patented mechanism (RULE 2) AND it agrees with the validated §5.3 λ data
+  // (Apple 0.94 is buffered/robust, Fish 0.87 is perishable/responsive). The
+  // prose is therefore the inverted half. We implement the formula and assert
+  // its true behaviour, including against the real Apple/Fish profiles below.
   it("after a temperature step, higher λ yields a lower (slower-rising) EMA", () => {
     const base = tomato;
     const highLambda: ProduceProfile = { ...base, lambda: 0.99 };
@@ -81,6 +81,26 @@ describe("§5.5 #3 — λ controls EMA inertia (thermal memory)", () => {
     // Both converge toward the same steady state u_t = (313.15−303.15)/10 = 1.0
     expect(emaLow).toBeGreaterThan(emaHigh);
     expect(emaLow).toBeLessThanOrEqual(1.0 + 1e-9);
+  });
+
+  it("validated λ data is consistent: Apple (0.94) has more inertia than Fish (0.87)", () => {
+    const T_K = 313.15; // identical 40 °C step applied to both
+    // Compare each EMA as a FRACTION of its own steady state u_t (their Tstress
+    // differ), so we isolate the λ-driven response speed. After N steps from 0,
+    // EMA/u_t = 1 − λ^N; the more inertial produce reaches a smaller fraction.
+    const appleSteady = Math.max(0, (T_K - apple.thermalStressK) / 10);
+    const fishSteady = Math.max(0, (T_K - fish.thermalStressK) / 10);
+
+    let appleEma = 0;
+    let fishEma = 0;
+    for (let i = 0; i < 10; i++) {
+      appleEma = emaUpdate(appleEma, T_K, apple);
+      fishEma = emaUpdate(fishEma, T_K, fish);
+    }
+
+    const appleFraction = appleEma / appleSteady;
+    const fishFraction = fishEma / fishSteady;
+    expect(appleFraction).toBeLessThan(fishFraction); // Apple slower = more inertia
   });
 });
 
