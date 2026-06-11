@@ -59,6 +59,8 @@ export interface ColdgridState {
   dispatch: (opts: DispatchOptions) => void;
   clearDelivered: () => void;
   resetSim: () => void;
+  /** Replace the whole simulation state (used by the Academy to load a scenario). */
+  loadSim: (sim: SimulationState) => void;
 
   // ── Environment actions ─────────────────────────────────────────────────
   setHourOfDay: (hour: number) => void;
@@ -97,6 +99,8 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   clearDelivered: () => set((s) => ({ sim: clearDelivered(s.sim) })),
 
   resetSim: () => set({ sim: createSimulation(SEED), isPlaying: false }),
+
+  loadSim: (sim) => set({ sim, isPlaying: false }),
 
   setHourOfDay: (hour) =>
     set((s) => ({ sim: { ...s.sim, hourOfDay: ((hour % 24) + 24) % 24 } })),

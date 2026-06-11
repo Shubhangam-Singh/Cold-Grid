@@ -35,3 +35,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scratch commit-message file used by the dev's local workflow
+msg.txt
+diag-out.txt

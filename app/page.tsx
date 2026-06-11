@@ -13,8 +13,16 @@ export default function Home() {
             Chennai Twin · Live
           </span>
         </div>
-        <div className="hidden font-mono text-[11px] text-slate-500 sm:block">
-          13.0827° N · 80.2707° E · Tamil Nadu
+        <div className="flex items-center gap-4">
+          <span className="hidden font-mono text-[11px] text-slate-500 sm:block">
+            13.0827° N · 80.2707° E · Tamil Nadu
+          </span>
+          <a
+            href="/academy"
+            className="rounded-md border border-amber-700/60 bg-amber-950/30 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-amber-300 transition hover:bg-amber-900/40"
+          >
+            Academy →
+          </a>
         </div>
       </header>
 

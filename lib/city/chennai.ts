@@ -423,3 +423,13 @@ export function planRoute(
   }
   return route;
 }
+
+/** Total road distance (km) of a route given as an ordered list of edge ids. */
+export function routeDistanceKm(route: string[]): number {
+  return route.reduce((sum, id) => sum + getEdge(id).distanceKm, 0);
+}
+
+/** Total nominal travel time (hours) of a route. */
+export function routeTravelHours(route: string[]): number {
+  return route.reduce((sum, id) => sum + getEdge(id).travelTimeMin / 60, 0);
+}

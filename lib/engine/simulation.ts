@@ -47,6 +47,8 @@ export interface Shipment {
    * route ambient — the operator's core cold-chain lever (full control in P5).
    */
   transportSetpointC: number | null;
+  /** Cumulative reefer compressor energy drawn (kWh) — drives cost & CO₂ scoring. */
+  energyKwh: number;
   /** Most recent synthetic sensor reading (for tooltips/sparklines). */
   lastTempC: number;
   lastRH: number;
@@ -71,6 +73,14 @@ export interface SimulationState {
 }
 
 const DEFAULT_START_HOUR = 5; // 05:00 — fish lands, the day begins
+
+/**
+ * Reefer compressor draw per °C of temperature lift (kW). Documented default:
+ * a reefer working against a hot ambient costs energy proportional to how far
+ * below ambient it holds the cargo — this is the cold/energy/CO₂ tradeoff the
+ * Academy teaches. Tunable.
+ */
+const COOLING_KW_PER_C = 0.045;
 
 function wrap24(h: number): number {
   return ((h % 24) + 24) % 24;
@@ -131,9 +141,13 @@ export function advanceShipment(s: Shipment, ctx: StepContext): Shipment {
 
   const profile = getProduce(s.produce);
   const edge = getEdge(s.route[s.legIndex]);
+  const routeAmbientC = edgeAmbientC(edge, ctx.hourOfDay, ctx.scenarioOffsetC);
   // A reefer holds its setpoint; an open truck tracks the route ambient.
-  const baseTemp =
-    s.transportSetpointC ?? edgeAmbientC(edge, ctx.hourOfDay, ctx.scenarioOffsetC);
+  const baseTemp = s.transportSetpointC ?? routeAmbientC;
+  // Compressor energy: only a reefer pulling cargo below ambient does work.
+  const liftC =
+    s.transportSetpointC != null ? Math.max(0, routeAmbientC - s.transportSetpointC) : 0;
+  const energyKwh = s.energyKwh + COOLING_KW_PER_C * liftC * ctx.dtHours;
   const sensors = syntheticSensors({
     seed: ctx.seed,
     key: `${s.id}|${edge.id}`,
@@ -169,6 +183,7 @@ export function advanceShipment(s: Shipment, ctx: StepContext): Shipment {
     legIndex,
     legProgress,
     status,
+    energyKwh,
     position: edgePosition(s.route[legIndex], legProgress),
     lastTempC: sensors.T_C,
     lastRH: sensors.RH,
@@ -246,6 +261,7 @@ export function dispatchShipment(
     dispatchClockHours: state.clockHours,
     position: startPos,
     transportSetpointC: setpoint,
+    energyKwh: 0,
     lastTempC: initialTempC,
     lastRH: 80,
     lastVOC: profile.vocRef,
