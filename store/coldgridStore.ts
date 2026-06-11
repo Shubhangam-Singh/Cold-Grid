@@ -3,10 +3,9 @@
  * engine + Chennai data (RULE 1: the engine never imports this; this imports
  * the engine).
  *
- * Phase 3 scope: holds the static city graph, a city clock (hour of day), a
- * scenario ambient override, and map interaction state (hover/selection). The
- * simulation tick loop and live shipments arrive in Phase 4 — the shape here
- * is deliberately forward-compatible with that.
+ * Phase 4: the store now owns a live SimulationState and playback controls. The
+ * tick loop itself lives in a React effect (components/twin/SimulationClock) so
+ * the engine stays pure and headless-testable.
  */
 
 import { create } from "zustand";
@@ -18,32 +17,57 @@ import {
   cityAmbientC,
   nodeHoldingTempC,
 } from "@/lib/city/chennai";
+import {
+  type DispatchOptions,
+  type SimulationState,
+  createSimulation,
+  dispatchShipment,
+  stepSimulation,
+} from "@/lib/engine/simulation";
+
+/** Simulated hours advanced per tick at 1× speed. */
+export const BASE_DT_HOURS = 0.1;
+/** Wall-clock interval between ticks (ms). */
+export const TICK_INTERVAL_MS = 150;
+/** Selectable playback speeds. */
+export const SPEEDS = [1, 2, 4] as const;
+
+const SEED = 12345;
 
 export interface ColdgridState {
   // ── City graph (static) ─────────────────────────────────────────────────
   nodes: CityNode[];
   edges: CityEdge[];
 
-  // ── Environment ─────────────────────────────────────────────────────────
-  /** City clock, hours 0–24 (drives the diurnal ambient profile). */
-  hourOfDay: number;
-  /** Scenario ambient override °C (heatwave +5, monsoon −2, …). */
-  scenarioOffsetC: number;
+  // ── Simulation ──────────────────────────────────────────────────────────
+  sim: SimulationState;
+  isPlaying: boolean;
+  speed: number;
 
   // ── Map interaction ─────────────────────────────────────────────────────
   hoveredNodeId: string | null;
   selectedNodeId: string | null;
 
-  // ── Actions ─────────────────────────────────────────────────────────────
+  // ── Playback actions ────────────────────────────────────────────────────
+  play: () => void;
+  pause: () => void;
+  togglePlay: () => void;
+  setSpeed: (speed: number) => void;
+  /** Advance the sim by one tick (dt defaults to BASE_DT_HOURS × speed). */
+  advance: (dtHours?: number) => void;
+  dispatch: (opts: DispatchOptions) => void;
+  resetSim: () => void;
+
+  // ── Environment actions ─────────────────────────────────────────────────
   setHourOfDay: (hour: number) => void;
   setScenarioOffsetC: (offsetC: number) => void;
+
+  // ── Interaction actions ─────────────────────────────────────────────────
   setHoveredNode: (id: string | null) => void;
   setSelectedNode: (id: string | null) => void;
 
   // ── Derived helpers ─────────────────────────────────────────────────────
-  /** Effective temperature of goods held at a node, given the current clock + scenario. */
   nodeTempC: (node: CityNode) => number;
-  /** City-wide ambient at the current clock + scenario. */
   currentAmbientC: () => number;
 }
 
@@ -51,24 +75,39 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   nodes: CHENNAI_NODES,
   edges: CHENNAI_EDGES,
 
-  hourOfDay: 14.5, // start at the afternoon peak so the heat is visible
-  scenarioOffsetC: 0,
+  sim: createSimulation(SEED),
+  isPlaying: false,
+  speed: 2,
 
   hoveredNodeId: null,
   selectedNodeId: null,
 
+  play: () => set({ isPlaying: true }),
+  pause: () => set({ isPlaying: false }),
+  togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
+  setSpeed: (speed) => set({ speed }),
+
+  advance: (dtHours) =>
+    set((s) => ({ sim: stepSimulation(s.sim, dtHours ?? BASE_DT_HOURS * s.speed) })),
+
+  dispatch: (opts) => set((s) => ({ sim: dispatchShipment(s.sim, opts) })),
+
+  resetSim: () => set({ sim: createSimulation(SEED), isPlaying: false }),
+
   setHourOfDay: (hour) =>
-    set({ hourOfDay: ((hour % 24) + 24) % 24 }), // wrap into [0,24)
-  setScenarioOffsetC: (offsetC) => set({ scenarioOffsetC: offsetC }),
+    set((s) => ({ sim: { ...s.sim, hourOfDay: ((hour % 24) + 24) % 24 } })),
+  setScenarioOffsetC: (offsetC) =>
+    set((s) => ({ sim: { ...s.sim, scenarioOffsetC: offsetC } })),
+
   setHoveredNode: (id) => set({ hoveredNodeId: id }),
   setSelectedNode: (id) => set({ selectedNodeId: id }),
 
   nodeTempC: (node) => {
-    const { hourOfDay, scenarioOffsetC } = get();
+    const { hourOfDay, scenarioOffsetC } = get().sim;
     return nodeHoldingTempC(node, hourOfDay, scenarioOffsetC);
   },
   currentAmbientC: () => {
-    const { hourOfDay, scenarioOffsetC } = get();
+    const { hourOfDay, scenarioOffsetC } = get().sim;
     return cityAmbientC(hourOfDay, scenarioOffsetC);
   },
 }));

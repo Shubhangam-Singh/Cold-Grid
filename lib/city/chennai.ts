@@ -329,3 +329,54 @@ export function reachableFrom(
   }
   return seen;
 }
+
+/**
+ * Shortest route (by travel time) from one node to another as an ordered list
+ * of edge ids. Returns [] if from === to, or null if no route exists under the
+ * given constraints. Dijkstra over travelTimeMin.
+ *
+ * closedEdgeIds / excludeFloodProne let the Phase 5 monsoon scenario force a
+ * reroute by removing roads — the dual main/alternate edges guarantee a path
+ * still exists (asserted in chennai.test.ts).
+ */
+export function planRoute(
+  fromId: string,
+  toId: string,
+  opts: { closedEdgeIds?: string[]; excludeFloodProne?: boolean } = {}
+): string[] | null {
+  if (fromId === toId) return [];
+  const closed = new Set(opts.closedEdgeIds ?? []);
+  const dist = new Map<string, number>([[fromId, 0]]);
+  const prevEdge = new Map<string, CityEdge>();
+  const visited = new Set<string>();
+  const frontier: { id: string; d: number }[] = [{ id: fromId, d: 0 }];
+
+  while (frontier.length > 0) {
+    frontier.sort((a, b) => a.d - b.d);
+    const { id, d } = frontier.shift() as { id: string; d: number };
+    if (visited.has(id)) continue;
+    visited.add(id);
+    if (id === toId) break;
+    for (const e of edgesFrom(id)) {
+      if (closed.has(e.id)) continue;
+      if (opts.excludeFloodProne && e.floodProne) continue;
+      const nd = d + e.travelTimeMin;
+      if (nd < (dist.get(e.to) ?? Infinity)) {
+        dist.set(e.to, nd);
+        prevEdge.set(e.to, e);
+        frontier.push({ id: e.to, d: nd });
+      }
+    }
+  }
+
+  if (!prevEdge.has(toId)) return null;
+  const route: string[] = [];
+  let cur = toId;
+  while (cur !== fromId) {
+    const e = prevEdge.get(cur);
+    if (!e) return null;
+    route.unshift(e.id);
+    cur = e.from;
+  }
+  return route;
+}

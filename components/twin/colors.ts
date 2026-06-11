@@ -44,6 +44,27 @@ export function tempToRgb(tC: number): RGB {
   return last.c;
 }
 
+// Quality ramp stops (0–100 → color): fresh green → at-risk amber → spoiled red.
+const QUALITY_STOPS: { q: number; c: RGB }[] = [
+  { q: 0, c: [239, 68, 68] }, // spoiled — red
+  { q: 35, c: [249, 115, 22] }, // critical — orange
+  { q: 60, c: [250, 204, 21] }, // at-risk — amber
+  { q: 100, c: [34, 197, 94] }, // fresh — green
+];
+
+/** Map a quality value (0–100) to its freshness color. */
+export function qualityToRgb(quality: number): RGB {
+  const q = Math.max(0, Math.min(100, quality));
+  for (let i = 0; i < QUALITY_STOPS.length - 1; i++) {
+    const lo = QUALITY_STOPS[i];
+    const hi = QUALITY_STOPS[i + 1];
+    if (q >= lo.q && q <= hi.q) {
+      return lerp(lo.c, hi.c, (q - lo.q) / (hi.q - lo.q));
+    }
+  }
+  return QUALITY_STOPS[QUALITY_STOPS.length - 1].c;
+}
+
 /** CSS rgb() string from an RGB triple (for the legend / HTML tooltip). */
 export function rgbCss(c: RGB): string {
   return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
