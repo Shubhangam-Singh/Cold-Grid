@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@deck.gl/aggregation-layers": "^9.3.3",
     "@deck.gl/core": "^9.3.3",
     "@deck.gl/layers": "^9.3.3",
