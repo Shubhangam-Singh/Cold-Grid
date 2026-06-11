@@ -36,6 +36,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# scratch commit-message file used by the dev's local workflow
+# scratch files used by the dev's local commit workflow
 msg.txt
 diag-out.txt
+amend_latest.py
