@@ -20,6 +20,7 @@ import {
 import {
   type DispatchOptions,
   type SimulationState,
+  clearDelivered,
   createSimulation,
   dispatchShipment,
   stepSimulation,
@@ -56,6 +57,7 @@ export interface ColdgridState {
   /** Advance the sim by one tick (dt defaults to BASE_DT_HOURS × speed). */
   advance: (dtHours?: number) => void;
   dispatch: (opts: DispatchOptions) => void;
+  clearDelivered: () => void;
   resetSim: () => void;
 
   // ── Environment actions ─────────────────────────────────────────────────
@@ -91,6 +93,8 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
     set((s) => ({ sim: stepSimulation(s.sim, dtHours ?? BASE_DT_HOURS * s.speed) })),
 
   dispatch: (opts) => set((s) => ({ sim: dispatchShipment(s.sim, opts) })),
+
+  clearDelivered: () => set((s) => ({ sim: clearDelivered(s.sim) })),
 
   resetSim: () => set({ sim: createSimulation(SEED), isPlaying: false }),
 

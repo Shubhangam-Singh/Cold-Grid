@@ -14,9 +14,11 @@ import { createBatch, isSpoiled, stepBatch } from "./spoilage";
 import { getProduce } from "./produce";
 import {
   edgeAmbientC,
+  edgePath,
   getEdge,
   getNode,
   planRoute,
+  pointAlongPath,
 } from "../city/chennai";
 import { mulberry32 } from "./rng";
 
@@ -39,6 +41,12 @@ export interface Shipment {
   dispatchClockHours: number;
   /** Current geographic position [lon, lat] (for map rendering). */
   position: [number, number];
+  /**
+   * Refrigerated-transport setpoint °C, or null for an ambient (open) truck.
+   * When set, the reefer holds the cargo at this temperature instead of the
+   * route ambient — the operator's core cold-chain lever (full control in P5).
+   */
+  transportSetpointC: number | null;
   /** Most recent synthetic sensor reading (for tooltips/sparklines). */
   lastTempC: number;
   lastRH: number;
@@ -104,22 +112,9 @@ export function syntheticSensors(args: {
   return { T_C, RH, VOC };
 }
 
-function lerpPos(
-  a: [number, number],
-  b: [number, number],
-  t: number
-): [number, number] {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-}
-
-/** Geographic position at a fractional point along an edge. */
+/** Geographic position at a fractional point along an edge's real road path. */
 function edgePosition(edgeId: string, legProgress: number): [number, number] {
-  const e = getEdge(edgeId);
-  return lerpPos(
-    getNode(e.from).coordinates,
-    getNode(e.to).coordinates,
-    legProgress
-  );
+  return pointAlongPath(edgePath(getEdge(edgeId)), legProgress);
 }
 
 interface StepContext {
@@ -136,7 +131,9 @@ export function advanceShipment(s: Shipment, ctx: StepContext): Shipment {
 
   const profile = getProduce(s.produce);
   const edge = getEdge(s.route[s.legIndex]);
-  const baseTemp = edgeAmbientC(edge, ctx.hourOfDay, ctx.scenarioOffsetC);
+  // A reefer holds its setpoint; an open truck tracks the route ambient.
+  const baseTemp =
+    s.transportSetpointC ?? edgeAmbientC(edge, ctx.hourOfDay, ctx.scenarioOffsetC);
   const sensors = syntheticSensors({
     seed: ctx.seed,
     key: `${s.id}|${edge.id}`,
@@ -201,6 +198,8 @@ export interface DispatchOptions {
   fromId: string;
   toId: string;
   label?: string;
+  /** Refrigerated-transport setpoint °C, or null/undefined for an ambient truck. */
+  transportSetpointC?: number | null;
 }
 
 /**
@@ -219,17 +218,19 @@ export function dispatchShipment(
 
   const id = `S${state.nextId}`;
   const profile = getProduce(opts.produce);
+  const setpoint = opts.transportSetpointC ?? null;
   const startPos =
     route.length > 0
       ? edgePosition(route[0], 0)
       : getNode(opts.fromId).coordinates;
 
-  // Initial sensor snapshot from the first leg's ambient (no noise yet) so the
-  // UI and equality checks never see NaN before the first tick.
+  // Initial sensor snapshot (no noise yet) so the UI and equality checks never
+  // see NaN before the first tick. A reefer starts at its setpoint.
   const initialTempC =
-    route.length > 0
+    setpoint ??
+    (route.length > 0
       ? edgeAmbientC(getEdge(route[0]), state.hourOfDay, state.scenarioOffsetC)
-      : getNode(opts.fromId).ambientOffsetC;
+      : getNode(opts.fromId).ambientOffsetC);
 
   const shipment: Shipment = {
     id,
@@ -244,6 +245,7 @@ export function dispatchShipment(
     destinationId: opts.toId,
     dispatchClockHours: state.clockHours,
     position: startPos,
+    transportSetpointC: setpoint,
     lastTempC: initialTempC,
     lastRH: 80,
     lastVOC: profile.vocRef,
@@ -280,4 +282,12 @@ export function stepSimulation(
 /** Convenience: is this shipment's cargo spoiled right now? */
 export function shipmentSpoiled(s: Shipment): boolean {
   return isSpoiled(s.batch, getProduce(s.produce));
+}
+
+/** Drop all delivered shipments, keeping in-transit ones. Pure. */
+export function clearDelivered(state: SimulationState): SimulationState {
+  return {
+    ...state,
+    shipments: state.shipments.filter((s) => s.status !== "delivered"),
+  };
 }

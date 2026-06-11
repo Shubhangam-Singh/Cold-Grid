@@ -9,7 +9,7 @@
 
 import { useMemo } from "react";
 import DeckGL from "@deck.gl/react";
-import { ArcLayer, LineLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import type { PickingInfo } from "@deck.gl/core";
 import { Map } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -17,6 +17,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import {
   type CityEdge,
   type CityNode,
+  edgePath,
   getEdge,
   getNode,
   nodeHoldingTempC,
@@ -40,9 +41,8 @@ const INITIAL_VIEW_STATE = {
 
 const MONO = "var(--font-mono), monospace";
 
-interface ArcDatum {
-  from: [number, number];
-  to: [number, number];
+interface RouteDatum {
+  path: [number, number][];
   quality: number;
   active: boolean;
 }
@@ -80,8 +80,12 @@ function shipmentTooltipHtml(s: Shipment): string {
   const tColor = rgbCss(tempToRgb(s.lastTempC));
   const pred = predictedShelfLifeHours(s.batch, profile, s.lastTempC);
   const spoiled = s.batch.quality <= 0;
+  const transport =
+    s.transportSetpointC != null
+      ? `❄ Reefer @ ${s.transportSetpointC.toFixed(0)}°C`
+      : "Ambient truck";
   return `<div style="font-weight:600;font-size:13px">${profile.label} shipment ${s.id}</div>
-    <div style="font-size:10px;color:#64748b;margin-top:2px">${getNode(s.originId).name} → ${getNode(s.destinationId).name}</div>
+    <div style="font-size:10px;color:#64748b;margin-top:2px">${getNode(s.originId).name} → ${getNode(s.destinationId).name} · ${transport}</div>
     <div style="margin-top:6px">Quality: <span style="font-family:${MONO};color:${qColor};font-weight:600">${s.batch.quality.toFixed(
       0
     )}%</span>${spoiled ? ' <span style="color:#ef4444">⚠ SPOILED</span>' : ""}</div>
@@ -111,44 +115,40 @@ export default function DeckMap() {
     [shipments]
   );
 
-  const arcData = useMemo<ArcDatum[]>(
+  const routeData = useMemo<RouteDatum[]>(
     () =>
       inTransit.flatMap((s) =>
-        s.route.map((edgeId, i) => {
-          const e = getEdge(edgeId);
-          return {
-            from: getNode(e.from).coordinates,
-            to: getNode(e.to).coordinates,
-            quality: s.batch.quality,
-            active: i === s.legIndex,
-          };
-        })
+        s.route.map((edgeId, i) => ({
+          path: edgePath(getEdge(edgeId)),
+          quality: s.batch.quality,
+          active: i === s.legIndex,
+        }))
       ),
     [inTransit]
   );
 
   const layers = useMemo(() => {
-    const edgeLayer = new LineLayer<CityEdge>({
-      id: "edges",
+    const roadLayer = new PathLayer<CityEdge>({
+      id: "roads",
       data: edges,
-      getSourcePosition: (e) => getNode(e.from).coordinates,
-      getTargetPosition: (e) => getNode(e.to).coordinates,
+      getPath: (e) => edgePath(e),
       getColor: (e) => (e.floodProne ? [120, 83, 28, 200] : [51, 65, 85, 150]),
-      getWidth: 1.5,
+      getWidth: 1.6,
       widthUnits: "pixels",
+      capRounded: true,
+      jointRounded: true,
       pickable: false,
     });
 
-    const routeArcs = new ArcLayer<ArcDatum>({
-      id: "route-arcs",
-      data: arcData,
-      getSourcePosition: (d) => d.from,
-      getTargetPosition: (d) => d.to,
-      getSourceColor: (d) => [...qualityToRgb(d.quality), d.active ? 230 : 90],
-      getTargetColor: (d) => [...qualityToRgb(d.quality), d.active ? 230 : 90],
-      getWidth: (d) => (d.active ? 3 : 1.5),
-      getHeight: 0.25,
+    const routeHighlight = new PathLayer<RouteDatum>({
+      id: "route-paths",
+      data: routeData,
+      getPath: (d) => d.path,
+      getColor: (d) => [...qualityToRgb(d.quality), d.active ? 235 : 90],
+      getWidth: (d) => (d.active ? 3.5 : 1.8),
       widthUnits: "pixels",
+      capRounded: true,
+      jointRounded: true,
       pickable: false,
     });
 
@@ -229,13 +229,13 @@ export default function DeckMap() {
       pickable: false,
     });
 
-    return [edgeLayer, routeArcs, shipmentHalo, nodeLayer, shipmentLayer, labelLayer];
+    return [roadLayer, routeHighlight, shipmentHalo, nodeLayer, shipmentLayer, labelLayer];
     // tempOf closes over hourOfDay/scenarioOffsetC; listed below so layers rebuild.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     nodes,
     edges,
-    arcData,
+    routeData,
     inTransit,
     hourOfDay,
     scenarioOffsetC,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   type SimulationState,
   advanceShipment,
+  clearDelivered,
   createSimulation,
   dispatchShipment,
   shipmentSpoiled,
@@ -10,7 +11,7 @@ import {
 } from "./simulation";
 import { createBatch } from "./spoilage";
 import { getProduce } from "./produce";
-import { planRoute } from "../city/chennai";
+import { edgePath, getEdge, planRoute, pointAlongPath } from "../city/chennai";
 
 /** Run a simulation to completion (all shipments delivered) or a tick cap. */
 function runToCompletion(
@@ -103,6 +104,24 @@ describe("physical realism", () => {
     expect(heatwave.batch.cumulativeDeg).toBeGreaterThan(normal.batch.cumulativeDeg);
   });
 
+  it("a refrigerated truck preserves quality far better than an ambient one", () => {
+    const dispatchRun = (setpoint: number | null) => {
+      let s = createSimulation(123);
+      s = { ...s, scenarioOffsetC: 6 }; // heatwave
+      s = dispatchShipment(s, {
+        produce: "fish",
+        fromId: "kasimedu",
+        toId: "mylapore",
+        transportSetpointC: setpoint,
+      });
+      return runToCompletion(s, 0.1).state.shipments[0];
+    };
+    const ambient = dispatchRun(null);
+    const reefer = dispatchRun(2);
+    expect(reefer.batch.quality).toBeGreaterThan(ambient.batch.quality);
+    expect(reefer.batch.breachTicks).toBe(0); // 2°C never breaches fish's 25°C threshold
+  });
+
   it("fragile milk on a long hot route is delivered spoiled", () => {
     let s = createSimulation(5);
     s = { ...s, scenarioOffsetC: 20 }; // heatwave
@@ -116,6 +135,43 @@ describe("physical realism", () => {
     expect(ship.status).toBe("delivered");
     expect(shipmentSpoiled(ship)).toBe(true);
     expect(ship.batch.quality).toBe(0);
+  });
+});
+
+describe("road geometry & housekeeping", () => {
+  it("shipments follow the real road polyline (not a straight line)", () => {
+    // The Kasimedu→Perambur road bends; a midpoint on the real path differs
+    // from the straight-line midpoint between the two nodes.
+    const edge = getEdge("kasimedu_perambur");
+    const path = edgePath(edge);
+    expect(path.length).toBeGreaterThan(2); // baked geometry, not a 2-point line
+    const start = path[0];
+    const end = path[path.length - 1];
+    const straightMid: [number, number] = [
+      (start[0] + end[0]) / 2,
+      (start[1] + end[1]) / 2,
+    ];
+    const roadMid = pointAlongPath(path, 0.5);
+    const dev =
+      Math.abs(roadMid[0] - straightMid[0]) + Math.abs(roadMid[1] - straightMid[1]);
+    expect(dev).toBeGreaterThan(1e-4); // the road deviates from the chord
+  });
+
+  it("pointAlongPath returns the endpoints at t=0 and t=1", () => {
+    const path = edgePath(getEdge("guindy_velachery_main"));
+    expect(pointAlongPath(path, 0)).toEqual(path[0]);
+    expect(pointAlongPath(path, 1)).toEqual(path[path.length - 1]);
+  });
+
+  it("clearDelivered drops delivered shipments but keeps in-transit ones", () => {
+    let s = createSimulation(1);
+    s = dispatchShipment(s, { produce: "fish", fromId: "kasimedu", toId: "mylapore" });
+    s = stepSimulation(s, 0.1); // still in transit
+    const cleared = clearDelivered(s);
+    expect(cleared.shipments).toHaveLength(1);
+
+    const delivered = runToCompletion(s, 0.1).state;
+    expect(clearDelivered(delivered).shipments).toHaveLength(0);
   });
 });
 

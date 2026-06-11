@@ -12,6 +12,7 @@
  */
 
 import type { ProduceId } from "../engine/types";
+import { EDGE_PATHS } from "./edgePaths";
 
 export type NodeType = "source" | "hub" | "retail";
 
@@ -107,6 +108,48 @@ export function edgeAmbientC(
   scenarioOffsetC = 0
 ): number {
   return cityAmbientC(hourOfDay, scenarioOffsetC) + edge.ambientOffsetC;
+}
+
+/**
+ * Real road geometry [lon, lat] for an edge (baked from OSRM — see
+ * scripts/genEdgePaths.mjs). Falls back to a straight from→to line if missing,
+ * so the app never breaks if the data file is absent.
+ */
+export function edgePath(edge: CityEdge): [number, number][] {
+  const path = EDGE_PATHS[edge.id];
+  if (path && path.length >= 2) return path;
+  return [getNode(edge.from).coordinates, getNode(edge.to).coordinates];
+}
+
+/** Point [lon, lat] at arc-length fraction t∈[0,1] along a polyline. */
+export function pointAlongPath(
+  path: [number, number][],
+  t: number
+): [number, number] {
+  if (path.length === 0) return [0, 0];
+  if (path.length === 1) return path[0];
+  const clamped = Math.max(0, Math.min(1, t));
+
+  const segLen: number[] = [];
+  let total = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const d = haversineKm(path[i], path[i + 1]);
+    segLen.push(d);
+    total += d;
+  }
+  if (total === 0) return path[0];
+
+  let target = clamped * total;
+  for (let i = 0; i < segLen.length; i++) {
+    if (target <= segLen[i] || i === segLen.length - 1) {
+      const f = segLen[i] === 0 ? 0 : Math.min(1, target / segLen[i]);
+      const a = path[i];
+      const b = path[i + 1];
+      return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+    }
+    target -= segLen[i];
+  }
+  return path[path.length - 1];
 }
 
 /** Great-circle distance between two [lon, lat] points, km. */
