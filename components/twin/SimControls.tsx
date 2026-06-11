@@ -7,11 +7,16 @@
  * and reset. All wired to the store's pure simulation actions.
  */
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SPEEDS, useColdgridStore } from "@/store/coldgridStore";
 import type { DispatchOptions } from "@/lib/engine/simulation";
 import { PRODUCE_IDS, getProduce } from "@/lib/engine/produce";
-import { CHENNAI_NODES } from "@/lib/city/chennai";
+import {
+  CHENNAI_NODES,
+  planRoute,
+  routeDistanceKm,
+  routeTravelHours,
+} from "@/lib/city/chennai";
 import type { ProduceId } from "@/lib/engine/types";
 
 const PRESETS: { label: string; opts: DispatchOptions }[] = [
@@ -46,6 +51,7 @@ export default function SimControls() {
   const clearDelivered = useColdgridStore((s) => s.clearDelivered);
   const resetSim = useColdgridStore((s) => s.resetSim);
   const setScenarioOffsetC = useColdgridStore((s) => s.setScenarioOffsetC);
+  const closedEdgeIds = useColdgridStore((s) => s.sim.closedEdgeIds);
 
   const [showCustom, setShowCustom] = useState(false);
   const [produce, setProduce] = useState<ProduceId>("fish");
@@ -56,13 +62,33 @@ export default function SimControls() {
 
   const heatwave = scenarioOffsetC > 0;
 
-  const dispatchCustom = () =>
-    dispatch({
-      produce,
-      fromId,
-      toId,
-      transportSetpointC: reefer ? setpoint : null,
-    });
+  // Only destinations actually reachable from the chosen origin (≠ origin, and a
+  // route exists under the current road closures) — so you can't pick a dead end.
+  const validDestinations = useMemo(
+    () =>
+      DESTINATIONS.filter(
+        (n) => n.id !== fromId && planRoute(fromId, n.id, { closedEdgeIds }) !== null
+      ),
+    [fromId, closedEdgeIds]
+  );
+
+  // Keep the destination valid whenever the origin (or closures) change.
+  useEffect(() => {
+    if (!validDestinations.some((n) => n.id === toId)) {
+      setToId(validDestinations[0]?.id ?? "");
+    }
+  }, [validDestinations, toId]);
+
+  const route = useMemo(
+    () => (toId ? planRoute(fromId, toId, { closedEdgeIds }) : null),
+    [fromId, toId, closedEdgeIds]
+  );
+  const canDispatch = route !== null && route.length > 0;
+
+  const dispatchCustom = () => {
+    if (!canDispatch) return;
+    dispatch({ produce, fromId, toId, transportSetpointC: reefer ? setpoint : null });
+  };
 
   return (
     <div className="absolute left-4 top-4 z-10 max-h-[calc(100vh-7rem)] w-64 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/85 p-3 backdrop-blur">
@@ -133,13 +159,24 @@ export default function SimControls() {
             <label className="flex-1">
               <span className="sr-only">Destination</span>
               <select className={selectCls} value={toId} onChange={(e) => setToId(e.target.value)}>
-                {DESTINATIONS.map((n) => (
+                {validDestinations.map((n) => (
                   <option key={n.id} value={n.id}>
                     {n.name}
                   </option>
                 ))}
               </select>
             </label>
+          </div>
+
+          <div className="font-mono text-[10px] text-slate-500">
+            {canDispatch && route ? (
+              <>
+                Route: {route.length} leg{route.length > 1 ? "s" : ""} ·{" "}
+                {routeDistanceKm(route).toFixed(1)} km · ~{routeTravelHours(route).toFixed(1)} h
+              </>
+            ) : (
+              <span className="text-amber-400">No open route — pick another destination.</span>
+            )}
           </div>
 
           <label className="flex items-center gap-2 text-xs text-slate-300">
@@ -170,7 +207,11 @@ export default function SimControls() {
             </label>
           )}
 
-          <button onClick={dispatchCustom} className={`${btn(false)} w-full bg-sky-600 text-white hover:bg-sky-500`}>
+          <button
+            onClick={dispatchCustom}
+            disabled={!canDispatch}
+            className="w-full rounded bg-sky-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500"
+          >
             Dispatch
           </button>
         </div>

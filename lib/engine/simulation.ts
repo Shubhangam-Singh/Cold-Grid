@@ -228,8 +228,9 @@ export interface DispatchOptions {
 
 /**
  * Dispatch a shipment from a source to a destination along the shortest open
- * route. Pure: returns a new state. If no route exists, returns state unchanged
- * (caller can detect by reference equality / unchanged shipment count).
+ * route. Pure: returns a new state. Returns state UNCHANGED if there is no route
+ * — including a same-node dispatch (empty route) — so a shipment is only created
+ * when it actually has somewhere to travel (and will therefore animate).
  */
 export function dispatchShipment(
   state: SimulationState,
@@ -238,23 +239,17 @@ export function dispatchShipment(
   const route = planRoute(opts.fromId, opts.toId, {
     closedEdgeIds: state.closedEdgeIds,
   });
-  if (route === null) return state;
+  if (route === null || route.length === 0) return state;
 
   const id = `S${state.nextId}`;
   const profile = getProduce(opts.produce);
   const setpoint = opts.transportSetpointC ?? null;
-  const startPos =
-    route.length > 0
-      ? edgePosition(route[0], 0)
-      : getNode(opts.fromId).coordinates;
+  const startPos = edgePosition(route[0], 0);
 
   // Initial sensor snapshot (no noise yet) so the UI and equality checks never
   // see NaN before the first tick. A reefer starts at its setpoint.
   const initialTempC =
-    setpoint ??
-    (route.length > 0
-      ? edgeAmbientC(getEdge(route[0]), state.hourOfDay, state.scenarioOffsetC)
-      : getNode(opts.fromId).ambientOffsetC);
+    setpoint ?? edgeAmbientC(getEdge(route[0]), state.hourOfDay, state.scenarioOffsetC);
 
   const shipment: Shipment = {
     id,
@@ -264,7 +259,7 @@ export function dispatchShipment(
     route,
     legIndex: 0,
     legProgress: 0,
-    status: route.length === 0 ? "delivered" : "in-transit",
+    status: "in-transit",
     originId: opts.fromId,
     destinationId: opts.toId,
     dispatchClockHours: state.clockHours,

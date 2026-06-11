@@ -163,6 +163,18 @@ describe("road geometry & housekeeping", () => {
     expect(pointAlongPath(path, 1)).toEqual(path[path.length - 1]);
   });
 
+  it("a same-node or unroutable dispatch creates no shipment (would never animate)", () => {
+    let s = createSimulation(1);
+    s = dispatchShipment(s, { produce: "fish", fromId: "hub-ambattur", toId: "hub-ambattur" });
+    expect(s.shipments).toHaveLength(0); // same node → no route → no-op
+    s = dispatchShipment(s, { produce: "tomato", fromId: "t-nagar", toId: "koyambedu" });
+    expect(s.shipments).toHaveLength(0); // retail can't originate → no-op
+    // a real route still works and is in-transit
+    s = dispatchShipment(s, { produce: "fish", fromId: "kasimedu", toId: "mylapore" });
+    expect(s.shipments).toHaveLength(1);
+    expect(s.shipments[0].status).toBe("in-transit");
+  });
+
   it("clearDelivered drops delivered shipments but keeps in-transit ones", () => {
     let s = createSimulation(1);
     s = dispatchShipment(s, { produce: "fish", fromId: "kasimedu", toId: "mylapore" });
