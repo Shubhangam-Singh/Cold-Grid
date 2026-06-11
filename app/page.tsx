@@ -5,24 +5,25 @@ export default function Home() {
   return (
     <main className="flex h-screen flex-col bg-[#07090d]">
       {/* Control-room status bar */}
-      <header className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
+      <header className="relative z-50 flex items-center justify-between px-6 py-4 glass-panel border-b-0 shadow-none bg-transparent">
         <div className="flex items-baseline gap-3">
-          <span className="text-lg font-bold tracking-tight text-slate-100">
+          <span className="text-xl font-bold tracking-tight text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]">
             ColdGrid
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-emerald-400">
+          <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-twin-cyan text-glow animate-pulse-slow">
             Chennai Twin · Live
           </span>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="hidden font-mono text-[11px] text-slate-500 sm:block">
+        <div className="flex items-center gap-6">
+          <span className="hidden font-mono text-[11px] text-slate-400 sm:block">
             13.0827° N · 80.2707° E · Tamil Nadu
           </span>
           <a
             href="/academy"
-            className="rounded-md border border-amber-700/60 bg-amber-950/30 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-amber-300 transition hover:bg-amber-900/40"
+            className="group relative overflow-hidden rounded-md border border-twin-amber/40 bg-twin-amber/10 px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-twin-amber transition-all duration-300 hover:scale-105 hover:bg-twin-amber/20 hover:shadow-[0_0_15px_rgba(255,176,0,0.3)]"
           >
-            Academy →
+            <span className="relative z-10">Academy →</span>
+            <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-twin-amber/20 to-transparent group-hover:animate-[shimmer_1.5s_infinite]"></div>
           </a>
         </div>
       </header>

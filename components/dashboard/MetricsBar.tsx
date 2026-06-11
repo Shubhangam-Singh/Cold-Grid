@@ -27,24 +27,25 @@ export default function MetricsBar() {
   const m = useMemo(() => fleetMetrics(shipments), [shipments]);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-800 bg-slate-950/60 px-5 py-2">
-      <Kpi label="Clock" value={formatHour(hourOfDay)} />
-      <Kpi label="In transit" value={String(m.inTransit)} accent="text-sky-400" />
-      <Kpi label="Delivered" value={String(m.delivered)} />
-      <Kpi label="Spoiled" value={String(m.spoiled)} accent={m.spoiled > 0 ? "text-red-400" : undefined} />
-      <Kpi label="Food saved" value={m.foodSavedPct == null ? "—" : `${m.foodSavedPct.toFixed(0)}%`} accent="text-emerald-400" />
-      <Kpi label="CO₂" value={`${m.co2Kg.toFixed(1)} kg`} />
-      <Kpi label="Cost" value={`₹${m.costRupees.toFixed(0)}`} />
-      <Kpi label="Reputation" value={`${m.reputation.toFixed(0)}`} accent={repColor(m.reputation)} />
+    <div className="relative z-40 flex flex-wrap items-center justify-center gap-x-4 gap-y-3 bg-gradient-to-b from-slate-900/60 to-transparent px-5 py-3 shadow-[0_4px_30px_rgba(0,0,0,0.3)] backdrop-blur-sm border-b border-white/5">
+      <Kpi label="Clock" value={formatHour(hourOfDay)} icon="⏱" />
+      <Kpi label="In transit" value={String(m.inTransit)} accent="text-twin-cyan text-glow" icon="🚚" />
+      <Kpi label="Delivered" value={String(m.delivered)} icon="📦" />
+      <Kpi label="Spoiled" value={String(m.spoiled)} accent={m.spoiled > 0 ? "text-twin-danger text-glow animate-pulse-slow" : undefined} icon="⚠️" />
+      <Kpi label="Food saved" value={m.foodSavedPct == null ? "—" : `${m.foodSavedPct.toFixed(0)}%`} accent="text-twin-emerald text-glow" icon="🌱" />
+      <Kpi label="CO₂" value={`${m.co2Kg.toFixed(1)} kg`} icon="💨" />
+      <Kpi label="Cost" value={`₹${m.costRupees.toFixed(0)}`} icon="💰" />
+      <Kpi label="Reputation" value={`${m.reputation.toFixed(0)}`} accent={repColor(m.reputation) + " text-glow"} icon="⭐" />
     </div>
   );
 }
 
-function Kpi({ label, value, accent }: { label: string; value: string; accent?: string }) {
+function Kpi({ label, value, accent, icon }: { label: string; value: string; accent?: string; icon?: string }) {
   return (
-    <div className="flex items-baseline gap-1.5">
-      <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-slate-500">{label}</span>
-      <span className={`font-mono text-sm font-semibold ${accent ?? "text-slate-100"}`}>{value}</span>
+    <div className="glass-pill flex items-center gap-2 px-3 py-1.5 transition-transform duration-300 hover:scale-105 hover:bg-slate-800/60 hover:shadow-[0_0_15px_rgba(0,240,255,0.15)]">
+      {icon && <span className="text-xs opacity-70">{icon}</span>}
+      <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-slate-400">{label}</span>
+      <span className={`font-mono text-sm font-bold ${accent ?? "text-white"}`}>{value}</span>
     </div>
   );
 }

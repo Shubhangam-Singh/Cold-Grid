@@ -21,12 +21,12 @@ export default function CityClock() {
   const ambientC = useColdgridStore((s) => s.currentAmbientC());
 
   return (
-    <div className="absolute right-4 top-4 z-10 w-64 rounded-lg border border-slate-800 bg-slate-950/85 p-3 backdrop-blur">
+    <div className="w-72 rounded-xl glass-panel p-4 animate-slide-up">
       <div className="flex items-baseline justify-between">
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
           City clock
         </span>
-        <span className="font-mono text-lg font-semibold text-slate-100">
+        <span className="font-mono text-lg font-bold text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]">
           {formatHour(hourOfDay)}
         </span>
       </div>
@@ -42,14 +42,14 @@ export default function CityClock() {
         step={0.5}
         value={hourOfDay}
         onChange={(e) => setHourOfDay(Number(e.target.value))}
-        className="mt-2 w-full accent-sky-400"
+        className="mt-3 w-full accent-twin-cyan cursor-pointer"
         aria-valuetext={`${formatHour(hourOfDay)}, city ambient ${ambientC.toFixed(1)} degrees`}
       />
 
-      <div className="mt-2 flex items-center justify-between text-xs">
-        <span className="text-slate-400">City ambient</span>
+      <div className="mt-3 flex items-center justify-between text-xs">
+        <span className="font-mono uppercase tracking-[0.1em] text-[10px] text-slate-400">City ambient</span>
         <span
-          className="font-mono font-semibold"
+          className="font-mono font-bold text-glow text-sm"
           style={{ color: rgbCss(tempToRgb(ambientC)) }}
         >
           {ambientC.toFixed(1)}°C

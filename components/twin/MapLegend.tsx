@@ -12,8 +12,8 @@ const TYPES: NodeType[] = ["source", "hub", "retail"];
 
 export default function MapLegend() {
   return (
-    <div className="pointer-events-none absolute bottom-4 left-4 z-10 w-60 rounded-lg border border-slate-800 bg-slate-950/85 p-3 backdrop-blur">
-      <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
+    <div className="pointer-events-none absolute bottom-6 left-6 z-10 w-64 rounded-xl glass-panel p-4 animate-slide-up">
+      <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400 border-b border-white/5 pb-2">
         Legend
       </div>
 
@@ -31,10 +31,10 @@ export default function MapLegend() {
         ))}
       </div>
 
-      <div className="mt-3 mb-1 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
+      <div className="mt-4 mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
         Ring = holding temp
       </div>
-      <div className="flex overflow-hidden rounded">
+      <div className="flex overflow-hidden rounded-full border border-slate-700/50 shadow-inner">
         {TEMP_LEGEND.map((stop) => (
           <div
             key={stop.label}

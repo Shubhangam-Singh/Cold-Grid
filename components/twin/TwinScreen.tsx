@@ -32,8 +32,14 @@ export default function TwinScreen() {
       <DeckMap />
       <SimulationClock />
       <SimControls />
-      <CityClock />
-      <ShipmentPanel />
+      <div className="absolute right-6 top-6 z-10 flex flex-col gap-4 pointer-events-none">
+        <div className="pointer-events-auto">
+          <CityClock />
+        </div>
+        <div className="pointer-events-auto">
+          <ShipmentPanel />
+        </div>
+      </div>
       <MapLegend />
       <CopilotPanel />
       <ShipmentDecayModal />

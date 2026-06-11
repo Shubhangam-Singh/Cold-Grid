@@ -32,14 +32,17 @@ const DESTINATIONS = CHENNAI_NODES.filter((n) => n.type !== "source");
 
 function btn(active = false) {
   return [
-    "rounded px-2.5 py-1 text-xs font-medium transition",
-    "focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400",
-    active ? "bg-sky-500 text-slate-950" : "bg-slate-800 text-slate-200 hover:bg-slate-700",
+    "rounded-md px-3 py-1.5 text-xs font-semibold transition-all duration-300",
+    "focus-visible:outline focus-visible:outline-2 focus-visible:outline-twin-cyan",
+    "hover:scale-[1.03] active:scale-[0.97]",
+    active 
+      ? "bg-twin-cyan/20 text-twin-cyan border border-twin-cyan/50 shadow-[0_0_10px_rgba(0,240,255,0.3)]" 
+      : "bg-slate-800/50 text-slate-300 border border-slate-700 hover:bg-slate-700/80 hover:border-slate-500",
   ].join(" ");
 }
 
 const selectCls =
-  "w-full rounded bg-slate-800 px-2 py-1 text-xs text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400";
+  "w-full rounded-md bg-slate-900/60 border border-slate-700/50 px-2 py-1.5 text-xs text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-twin-cyan transition-colors hover:border-slate-500";
 
 export default function SimControls() {
   const isPlaying = useColdgridStore((s) => s.isPlaying);
@@ -91,7 +94,7 @@ export default function SimControls() {
   };
 
   return (
-    <div className="absolute left-4 top-4 z-10 max-h-[calc(100vh-7rem)] w-64 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/85 p-3 backdrop-blur">
+    <div className="absolute left-6 top-6 z-20 max-h-[calc(100vh-22rem)] w-72 overflow-y-auto rounded-xl glass-panel p-4 animate-slide-up">
       <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
         Operations
       </div>
@@ -117,7 +120,7 @@ export default function SimControls() {
           <button
             key={d.label}
             onClick={() => dispatch(d.opts)}
-            className="block w-full rounded bg-slate-800 px-2.5 py-1.5 text-left text-xs text-slate-200 transition hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400"
+            className="block w-full rounded-md border border-transparent bg-slate-800/40 px-3 py-2 text-left text-xs text-slate-200 transition-all duration-300 hover:scale-[1.02] hover:bg-slate-700/60 hover:border-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-twin-cyan"
           >
             {d.label}
           </button>
@@ -126,14 +129,14 @@ export default function SimControls() {
 
       <button
         onClick={() => setShowCustom((v) => !v)}
-        className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-sky-400 hover:text-sky-300"
+        className="mt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-twin-cyan hover:text-white transition-colors duration-300"
         aria-expanded={showCustom}
       >
         {showCustom ? "▾ Custom dispatch" : "▸ Custom dispatch"}
       </button>
 
       {showCustom && (
-        <div className="mt-1.5 space-y-1.5 rounded bg-slate-900/70 p-2">
+        <div className="mt-2 space-y-2 rounded-lg border border-slate-700/50 bg-slate-900/40 p-3 shadow-inner">
           <label className="block">
             <span className="sr-only">Produce</span>
             <select className={selectCls} value={produce} onChange={(e) => setProduce(e.target.value as ProduceId)}>
@@ -184,7 +187,7 @@ export default function SimControls() {
               type="checkbox"
               checked={reefer}
               onChange={(e) => setReefer(e.target.checked)}
-              className="accent-sky-400"
+              className="accent-twin-cyan w-4 h-4"
             />
             Refrigerated truck
           </label>
@@ -199,7 +202,7 @@ export default function SimControls() {
                   step={1}
                   value={setpoint}
                   onChange={(e) => setSetpoint(Number(e.target.value))}
-                  className="w-24 accent-sky-400"
+                  className="w-24 accent-twin-cyan cursor-pointer"
                   aria-label="Reefer setpoint °C"
                 />
                 <span className="w-8 font-mono text-slate-200">{setpoint}°</span>
@@ -210,7 +213,7 @@ export default function SimControls() {
           <button
             onClick={dispatchCustom}
             disabled={!canDispatch}
-            className="w-full rounded bg-sky-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500"
+            className="w-full rounded-md bg-twin-cyan/20 border border-twin-cyan/50 px-3 py-2 text-xs font-bold text-twin-cyan transition-all duration-300 hover:bg-twin-cyan/40 hover:shadow-[0_0_15px_rgba(0,240,255,0.4)] hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-twin-cyan disabled:cursor-not-allowed disabled:bg-slate-800/50 disabled:border-slate-700 disabled:text-slate-500 disabled:hover:scale-100 disabled:hover:shadow-none"
           >
             Dispatch
           </button>
@@ -218,14 +221,14 @@ export default function SimControls() {
       )}
 
       <div className="mt-3 flex items-center justify-between">
-        <button onClick={() => setScenarioOffsetC(heatwave ? 0 : 6)} className={btn(heatwave)} aria-pressed={heatwave}>
+        <button onClick={() => setScenarioOffsetC(heatwave ? 0 : 6)} className={`${btn(heatwave)} ${heatwave ? 'animate-glow-pulse border-twin-danger/50 text-twin-danger bg-twin-danger/20 shadow-[0_0_15px_rgba(255,51,102,0.4)]' : ''}`} aria-pressed={heatwave}>
           {heatwave ? "🔥 Heatwave ON" : "Heatwave OFF"}
         </button>
         <div className="flex items-center gap-2">
-          <button onClick={clearDelivered} className="text-xs text-slate-400 transition hover:text-slate-100">
+          <button onClick={clearDelivered} className="text-xs text-slate-400 transition-colors hover:text-white hover:text-glow">
             Clear done
           </button>
-          <button onClick={resetSim} className="text-xs text-slate-400 transition hover:text-slate-100">
+          <button onClick={resetSim} className="text-xs text-slate-400 transition-colors hover:text-white hover:text-glow">
             ↺ Reset
           </button>
         </div>
