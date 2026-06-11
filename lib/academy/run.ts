@@ -6,6 +6,7 @@
 
 import { routeDistanceKm } from "../city/chennai";
 import {
+  SIM_DT_HOURS,
   type SimulationState,
   createSimulation,
   dispatchShipment,
@@ -49,8 +50,8 @@ export function simulateScenario(
   decisions: DeliveryDecision[],
   opts: { seed?: number; dtHours?: number; maxTicks?: number } = {}
 ): ScenarioRun {
-  const dtHours = opts.dtHours ?? 0.1;
-  const maxTicks = opts.maxTicks ?? 200000;
+  const dtHours = opts.dtHours ?? SIM_DT_HOURS;
+  const maxTicks = opts.maxTicks ?? 2000000;
 
   let sim = scenarioInitialSim(scenario, opts.seed ?? SCENARIO_SEED);
   const shipmentByDelivery = new Map<string, string>();

@@ -18,6 +18,7 @@ import {
   nodeHoldingTempC,
 } from "@/lib/city/chennai";
 import {
+  SIM_DT_HOURS,
   type DispatchOptions,
   type SimulationState,
   clearDelivered,
@@ -26,11 +27,13 @@ import {
   stepSimulation,
 } from "@/lib/engine/simulation";
 
-/** Simulated hours advanced per tick at 1× speed. */
-export const BASE_DT_HOURS = 0.1;
-/** Wall-clock interval between ticks (ms). */
-export const TICK_INTERVAL_MS = 150;
-/** Selectable playback speeds. */
+/**
+ * Wall-clock interval between ticks (ms). Kept short so 1× is smooth (≈10 fps);
+ * speed multiplies the NUMBER of fixed SIM_DT_HOURS steps per tick, not the
+ * step size — so the trajectory is identical at every speed.
+ */
+export const TICK_INTERVAL_MS = 100;
+/** Selectable playback speeds (steps advanced per tick). */
 export const SPEEDS = [1, 2, 4] as const;
 
 const SEED = 12345;
@@ -54,7 +57,7 @@ export interface ColdgridState {
   pause: () => void;
   togglePlay: () => void;
   setSpeed: (speed: number) => void;
-  /** Advance the sim by one tick (dt defaults to BASE_DT_HOURS × speed). */
+  /** Advance the sim: `speed` fixed SIM_DT_HOURS steps, or one step of an explicit dt. */
   advance: (dtHours?: number) => void;
   dispatch: (opts: DispatchOptions) => void;
   clearDelivered: () => void;
@@ -92,7 +95,14 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   setSpeed: (speed) => set({ speed }),
 
   advance: (dtHours) =>
-    set((s) => ({ sim: stepSimulation(s.sim, dtHours ?? BASE_DT_HOURS * s.speed) })),
+    set((s) => {
+      // Explicit dt → a single step (tests). Otherwise advance `speed` fixed
+      // SIM_DT_HOURS steps so the trajectory is speed-independent.
+      if (dtHours != null) return { sim: stepSimulation(s.sim, dtHours) };
+      let sim = s.sim;
+      for (let i = 0; i < s.speed; i++) sim = stepSimulation(sim, SIM_DT_HOURS);
+      return { sim };
+    }),
 
   dispatch: (opts) => set((s) => ({ sim: dispatchShipment(s.sim, opts) })),
 

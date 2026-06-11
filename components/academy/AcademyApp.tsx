@@ -16,6 +16,8 @@ import OperatorConsole from "./OperatorConsole";
 import ResultScreen from "./ResultScreen";
 import SimulationClock from "@/components/twin/SimulationClock";
 import MapLegend from "@/components/twin/MapLegend";
+import ShipmentPanel from "@/components/twin/ShipmentPanel";
+import { SPEEDS } from "@/store/coldgridStore";
 
 const DeckMap = dynamic(() => import("@/components/twin/DeckMap"), {
   ssr: false,
@@ -30,12 +32,28 @@ const DeckMap = dynamic(() => import("@/components/twin/DeckMap"), {
 
 function RunningBanner() {
   const finishRun = useAcademyStore((s) => s.finishRun);
+  const speed = useColdgridStore((s) => s.speed);
+  const setSpeed = useColdgridStore((s) => s.setSpeed);
   return (
     <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-lg border border-slate-800 bg-slate-950/90 px-4 py-2 backdrop-blur">
       <div className="flex items-center gap-3">
         <span className="font-mono text-xs uppercase tracking-[0.2em] text-emerald-400">
           ● Running the day…
         </span>
+        <div className="flex items-center gap-1" role="group" aria-label="Speed">
+          {SPEEDS.map((sp) => (
+            <button
+              key={sp}
+              onClick={() => setSpeed(sp)}
+              aria-pressed={speed === sp}
+              className={`rounded px-2 py-0.5 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 ${
+                speed === sp ? "bg-sky-500 text-slate-950" : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+              }`}
+            >
+              {sp}×
+            </button>
+          ))}
+        </div>
         <button
           onClick={finishRun}
           className="rounded bg-slate-800 px-2.5 py-1 text-xs text-slate-200 transition hover:bg-slate-700"
@@ -92,7 +110,12 @@ export default function AcademyApp() {
         {phase === "select" && <ScenarioSelect />}
         {phase === "briefing" && <Briefing />}
         {phase === "operate" && <OperatorConsole />}
-        {phase === "running" && <RunningBanner />}
+        {phase === "running" && (
+          <>
+            <RunningBanner />
+            <ShipmentPanel />
+          </>
+        )}
         {phase === "result" && <ResultScreen />}
       </div>
     </main>

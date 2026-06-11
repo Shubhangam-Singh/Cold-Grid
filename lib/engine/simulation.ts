@@ -22,6 +22,15 @@ import {
 } from "../city/chennai";
 import { mulberry32 } from "./rng";
 
+/**
+ * Canonical integration step (simulated hours per tick). FIXED across the app:
+ * playback speed changes how many of these steps run per wall-clock second, NOT
+ * the step size — so a run is byte-identical at 1× / 2× / 4× (and the Academy's
+ * on-map animation exactly matches its headless score). Small enough that a
+ * marker moves smoothly and is easy to trace at 1×.
+ */
+export const SIM_DT_HOURS = 0.01;
+
 export type ShipmentStatus = "in-transit" | "delivered";
 
 export interface Shipment {
