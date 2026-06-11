@@ -1,0 +1,31 @@
+"use client";
+
+/**
+ * Client shell for the Twin. The deck.gl/MapLibre map is loaded with ssr:false
+ * (it touches `window`), and the legend + city clock overlay it.
+ */
+
+import dynamic from "next/dynamic";
+import MapLegend from "./MapLegend";
+import CityClock from "./CityClock";
+
+const DeckMap = dynamic(() => import("./DeckMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full w-full items-center justify-center bg-[#07090d]">
+      <span className="font-mono text-xs uppercase tracking-[0.2em] text-slate-500">
+        Loading Chennai twin…
+      </span>
+    </div>
+  ),
+});
+
+export default function TwinScreen() {
+  return (
+    <div className="relative h-full w-full overflow-hidden">
+      <DeckMap />
+      <CityClock />
+      <MapLegend />
+    </div>
+  );
+}

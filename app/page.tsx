@@ -1,17 +1,26 @@
+import TwinScreen from "@/components/twin/TwinScreen";
+
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8">
-      <p className="font-mono text-xs uppercase tracking-[0.3em] text-emerald-400">
-        Phase 0 — Scaffold online
-      </p>
-      <h1 className="text-5xl font-bold tracking-tight">ColdGrid</h1>
-      <p className="max-w-xl text-center text-sm leading-relaxed text-slate-400">
-        A digital twin of Chennai&apos;s perishable-food cold chain with an
-        operator training academy — powered by the patented PPSC Adaptive
-        Arrhenius + EMA spoilage engine.
-      </p>
-      <div className="font-mono text-xs text-slate-500">
-        13.0827° N, 80.2707° E · Chennai, Tamil Nadu
+    <main className="flex h-screen flex-col bg-[#07090d]">
+      {/* Control-room status bar */}
+      <header className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
+        <div className="flex items-baseline gap-3">
+          <span className="text-lg font-bold tracking-tight text-slate-100">
+            ColdGrid
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-emerald-400">
+            Chennai Twin
+          </span>
+        </div>
+        <div className="hidden font-mono text-[11px] text-slate-500 sm:block">
+          13.0827° N · 80.2707° E · Tamil Nadu
+        </div>
+      </header>
+
+      {/* The hero: live Chennai map */}
+      <div className="relative flex-1">
+        <TwinScreen />
       </div>
     </main>
   );
