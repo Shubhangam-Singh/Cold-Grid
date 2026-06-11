@@ -14,6 +14,8 @@ import ScenarioSelect from "./ScenarioSelect";
 import Briefing from "./Briefing";
 import OperatorConsole from "./OperatorConsole";
 import ResultScreen from "./ResultScreen";
+import CertificateScreen from "./CertificateScreen";
+import QuizModal from "@/components/learning/QuizModal";
 import SimulationClock from "@/components/twin/SimulationClock";
 import MapLegend from "@/components/twin/MapLegend";
 import ShipmentPanel from "@/components/twin/ShipmentPanel";
@@ -108,6 +110,9 @@ export default function AcademyApp() {
           </>
         )}
         {phase === "select" && <ScenarioSelect />}
+        {phase === "pre-assessment" && <QuizModal mode="pre" />}
+        {phase === "post-assessment" && <QuizModal mode="post" />}
+        {phase === "certificate" && <CertificateScreen />}
         {phase === "briefing" && <Briefing />}
         {phase === "operate" && <OperatorConsole />}
         {phase === "running" && (

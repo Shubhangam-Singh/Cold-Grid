@@ -6,21 +6,34 @@
  * loop (spec §7.1).
  */
 
+import { useState } from "react";
+import dynamic from "next/dynamic";
 import { SCENARIOS, getScenario } from "@/lib/academy/scenarios";
 import { certificationLevel } from "@/lib/academy/scoring";
 import { useAcademyStore } from "@/store/academyStore";
 import { getProduce } from "@/lib/engine/produce";
 import { qualityToRgb, rgbCss } from "@/components/twin/colors";
+import type { DeliveryResult } from "@/lib/academy/run";
 import Stars from "./Stars";
+
+// Lazy — pulls in recharts only when a decay curve is actually opened.
+const DecayCurveModal = dynamic(() => import("@/components/dashboard/DecayCurveModal"), {
+  ssr: false,
+});
 
 export default function ResultScreen() {
   const scenarioId = useAcademyStore((s) => s.scenarioId);
   const results = useAcademyStore((s) => s.results);
   const score = useAcademyStore((s) => s.score);
   const completed = useAcademyStore((s) => s.completed);
+  const postScore = useAcademyStore((s) => s.postScore);
   const retry = useAcademyStore((s) => s.retry);
   const nextScenario = useAcademyStore((s) => s.nextScenario);
   const backToSelect = useAcademyStore((s) => s.backToSelect);
+  const startAssessment = useAcademyStore((s) => s.startAssessment);
+  const viewCertificate = useAcademyStore((s) => s.viewCertificate);
+
+  const [curve, setCurve] = useState<DeliveryResult | null>(null);
 
   if (!scenarioId || !results || !score) return null;
   const scenario = getScenario(scenarioId);
@@ -85,13 +98,21 @@ export default function ResultScreen() {
                     {r.dispatched ? `${r.qualityPct.toFixed(0)}%` : "not sent"}
                   </span>
                 </div>
-                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[10px] text-slate-500">
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-slate-500">
                   <span>{r.reefer ? "❄ reefer" : "ambient"}</span>
                   <span>{r.transitHours.toFixed(1)} h transit</span>
                   <span className={r.onTime ? "text-emerald-400" : "text-amber-400"}>
                     {r.onTime ? "on time" : "late"}
                   </span>
                   {r.spoiled && <span className="text-red-400">⚠ spoiled</span>}
+                  {r.history.length >= 2 && (
+                    <button
+                      onClick={() => setCurve(r)}
+                      className="ml-auto text-sky-400 underline-offset-2 hover:underline"
+                    >
+                      decay curve →
+                    </button>
+                  )}
                 </div>
               </li>
             );
@@ -137,17 +158,33 @@ export default function ResultScreen() {
             >
               ↺ Retry
             </button>
-            {!isLast && (
+            {!isLast ? (
               <button
                 onClick={nextScenario}
                 className="rounded-lg bg-sky-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300"
               >
                 Next scenario →
               </button>
+            ) : (
+              <button
+                onClick={() => (postScore == null ? startAssessment("post") : viewCertificate())}
+                className="rounded-lg bg-emerald-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300"
+              >
+                {postScore == null ? "Final assessment →" : "View certificate →"}
+              </button>
             )}
           </div>
         </div>
       </div>
+
+      {curve && (
+        <DecayCurveModal
+          history={curve.history}
+          produce={curve.delivery.produce}
+          title={`${getProduce(curve.delivery.produce).label} — ${curve.delivery.label}`}
+          onClose={() => setCurve(null)}
+        />
+      )}
     </div>
   );
 }

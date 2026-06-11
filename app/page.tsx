@@ -1,4 +1,5 @@
 import TwinScreen from "@/components/twin/TwinScreen";
+import MetricsBar from "@/components/dashboard/MetricsBar";
 
 export default function Home() {
   return (
@@ -25,6 +26,9 @@ export default function Home() {
           </a>
         </div>
       </header>
+
+      {/* Dashboard KPI strip */}
+      <MetricsBar />
 
       {/* The hero: live Chennai map */}
       <div className="relative flex-1">

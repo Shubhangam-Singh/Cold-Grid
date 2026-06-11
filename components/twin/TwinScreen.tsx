@@ -12,6 +12,7 @@ import CityClock from "./CityClock";
 import SimControls from "./SimControls";
 import ShipmentPanel from "./ShipmentPanel";
 import SimulationClock from "./SimulationClock";
+import ShipmentDecayModal from "./ShipmentDecayModal";
 
 const DeckMap = dynamic(() => import("./DeckMap"), {
   ssr: false,
@@ -33,6 +34,7 @@ export default function TwinScreen() {
       <CityClock />
       <ShipmentPanel />
       <MapLegend />
+      <ShipmentDecayModal />
     </div>
   );
 }

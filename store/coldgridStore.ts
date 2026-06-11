@@ -51,6 +51,8 @@ export interface ColdgridState {
   // ── Map interaction ─────────────────────────────────────────────────────
   hoveredNodeId: string | null;
   selectedNodeId: string | null;
+  /** Shipment whose decay curve is open (null = closed). */
+  selectedShipmentId: string | null;
 
   // ── Playback actions ────────────────────────────────────────────────────
   play: () => void;
@@ -72,6 +74,7 @@ export interface ColdgridState {
   // ── Interaction actions ─────────────────────────────────────────────────
   setHoveredNode: (id: string | null) => void;
   setSelectedNode: (id: string | null) => void;
+  setSelectedShipment: (id: string | null) => void;
 
   // ── Derived helpers ─────────────────────────────────────────────────────
   nodeTempC: (node: CityNode) => number;
@@ -88,6 +91,7 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
 
   hoveredNodeId: null,
   selectedNodeId: null,
+  selectedShipmentId: null,
 
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
@@ -119,6 +123,7 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
 
   setHoveredNode: (id) => set({ hoveredNodeId: id }),
   setSelectedNode: (id) => set({ selectedNodeId: id }),
+  setSelectedShipment: (id) => set({ selectedShipmentId: id }),
 
   nodeTempC: (node) => {
     const { hourOfDay, scenarioOffsetC } = get().sim;

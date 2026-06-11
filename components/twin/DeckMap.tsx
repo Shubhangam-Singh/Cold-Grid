@@ -93,7 +93,8 @@ function shipmentTooltipHtml(s: Shipment): string {
       1
     )}°C</span> · RH <span style="font-family:${MONO}">${s.lastRH.toFixed(0)}%</span></div>
     <div>Est. life left @ temp: <span style="font-family:${MONO}">~${pred.toFixed(1)} h</span></div>
-    <div style="color:#94a3b8;font-size:11px;margin-top:4px">Thermal breaches: ${s.batch.breachTicks} ticks</div>`;
+    <div style="color:#94a3b8;font-size:11px;margin-top:4px">Thermal breaches: ${s.batch.breachTicks} ticks</div>
+    <div style="color:#38bdf8;font-size:10px;margin-top:4px">click → decay curve</div>`;
 }
 
 export default function DeckMap() {
@@ -106,6 +107,7 @@ export default function DeckMap() {
   const selectedNodeId = useColdgridStore((s) => s.selectedNodeId);
   const setHoveredNode = useColdgridStore((s) => s.setHoveredNode);
   const setSelectedNode = useColdgridStore((s) => s.setSelectedNode);
+  const setSelectedShipment = useColdgridStore((s) => s.setSelectedShipment);
 
   const tempOf = (node: CityNode) =>
     nodeHoldingTempC(node, hourOfDay, scenarioOffsetC);
@@ -207,6 +209,8 @@ export default function DeckMap() {
       pickable: true,
       autoHighlight: true,
       highlightColor: [255, 255, 255, 60],
+      onClick: (info: PickingInfo<Shipment>) =>
+        setSelectedShipment(info.object ? info.object.id : null),
       updateTriggers: { getFillColor: [inTransit] },
     });
 
@@ -243,6 +247,7 @@ export default function DeckMap() {
     selectedNodeId,
     setHoveredNode,
     setSelectedNode,
+    setSelectedShipment,
   ]);
 
   return (

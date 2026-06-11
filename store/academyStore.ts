@@ -15,10 +15,19 @@ import {
 } from "@/lib/academy/scenarios";
 import { type DeliveryResult, scenarioInitialSim, simulateScenario } from "@/lib/academy/run";
 import { type ScenarioScore, scoreScenario } from "@/lib/academy/scoring";
+import { scoreQuiz } from "@/lib/academy/assessment";
 import type { DeliveryDecision } from "@/lib/academy/types";
 import { useColdgridStore } from "./coldgridStore";
 
-export type AcademyPhase = "select" | "briefing" | "operate" | "running" | "result";
+export type AcademyPhase =
+  | "select"
+  | "pre-assessment"
+  | "post-assessment"
+  | "briefing"
+  | "operate"
+  | "running"
+  | "result"
+  | "certificate";
 
 export interface CompletedRecord {
   stars: number;
@@ -35,6 +44,10 @@ interface AcademyState {
   /** Best result per scenario (for certification + progress). */
   completed: Record<string, CompletedRecord>;
 
+  /** Pre/post assessment scores (% correct), null until taken. */
+  preScore: number | null;
+  postScore: number | null;
+
   openBriefing: (scenarioId: string) => void;
   startOperate: () => void;
   setDecision: (deliveryId: string, patch: Partial<DeliveryDecision>) => void;
@@ -43,6 +56,10 @@ interface AcademyState {
   retry: () => void;
   nextScenario: () => void;
   backToSelect: () => void;
+
+  startAssessment: (mode: "pre" | "post") => void;
+  submitAssessment: (mode: "pre" | "post", answers: Record<string, number>) => void;
+  viewCertificate: () => void;
 }
 
 function decisionsArray(decisions: Record<string, DeliveryDecision>): DeliveryDecision[] {
@@ -74,6 +91,8 @@ export const useAcademyStore = create<AcademyState>((set, get) => ({
   results: null,
   score: null,
   completed: {},
+  preScore: null,
+  postScore: null,
 
   openBriefing: (scenarioId) => {
     const scenario = getScenario(scenarioId);
@@ -142,4 +161,14 @@ export const useAcademyStore = create<AcademyState>((set, get) => ({
     useColdgridStore.getState().resetSim();
     set({ phase: "select", scenarioId: null, results: null, score: null });
   },
+
+  startAssessment: (mode) => set({ phase: mode === "pre" ? "pre-assessment" : "post-assessment" }),
+
+  submitAssessment: (mode, answers) => {
+    const score = scoreQuiz(answers);
+    if (mode === "pre") set({ preScore: score, phase: "select" });
+    else set({ postScore: score, phase: "certificate" });
+  },
+
+  viewCertificate: () => set({ phase: "certificate" }),
 }));

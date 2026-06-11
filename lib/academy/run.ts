@@ -12,6 +12,7 @@ import {
   dispatchShipment,
   stepSimulation,
 } from "../engine/simulation";
+import type { BatchHistoryPoint } from "../engine/types";
 import type { DeliveryDecision, RequiredDelivery, Scenario } from "./types";
 
 export interface DeliveryResult {
@@ -25,6 +26,8 @@ export interface DeliveryResult {
   distanceKm: number;
   reefer: boolean;
   spoiled: boolean;
+  /** Per-tick degradation history for the decay-curve viewer. */
+  history: BatchHistoryPoint[];
 }
 
 export interface ScenarioRun {
@@ -92,6 +95,7 @@ export function simulateScenario(
         distanceKm: 0,
         reefer: false,
         spoiled: true,
+        history: [],
       };
     }
     return {
@@ -104,6 +108,7 @@ export function simulateScenario(
       distanceKm: routeDistanceKm(ship.route),
       reefer: ship.transportSetpointC != null,
       spoiled: ship.batch.quality <= 0,
+      history: ship.batch.history,
     };
   });
 
