@@ -19,9 +19,9 @@ export default function ScenarioSelect() {
   const cert = certificationLevel(totalStars, SCENARIOS.length);
 
   return (
-    <div className="h-full w-full overflow-y-auto bg-[#07090d] px-6 py-8">
-      <div className="mx-auto max-w-4xl">
-        <h1 className="text-2xl font-bold text-slate-100">Operator Training Academy</h1>
+    <div className="h-full w-full overflow-y-auto bg-transparent px-6 py-8">
+      <div className="mx-auto max-w-4xl pt-10">
+        <h1 className="text-4xl font-bold text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.2)]">Operator Training Academy</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">
           You are Chennai&apos;s cold-chain duty officer. Handle five real-world crises, keep the
           city&apos;s food fresh, and earn your certification. Each scenario is graded on food
@@ -79,10 +79,11 @@ export default function ScenarioSelect() {
               <button
                 key={s.id}
                 onClick={() => openBriefing(s.id)}
-                className="group rounded-lg border border-slate-800 bg-slate-950/60 p-4 text-left transition hover:border-sky-700 hover:bg-slate-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400"
+                className="group relative overflow-hidden rounded-xl glass-panel p-5 text-left transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-[0_8px_30px_rgba(0,240,255,0.15)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-twin-cyan"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-sky-400">
+                <div className="absolute inset-0 bg-gradient-to-br from-twin-cyan/0 via-transparent to-twin-cyan/0 opacity-0 transition-opacity duration-300 group-hover:opacity-10 group-hover:from-twin-cyan/20"></div>
+                <div className="relative z-10 flex items-center justify-between">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-twin-cyan drop-shadow-[0_0_8px_rgba(0,240,255,0.4)]">
                     Scenario {s.index}
                   </span>
                   {record ? <Stars value={record.stars} size="text-sm" /> : (
@@ -91,9 +92,9 @@ export default function ScenarioSelect() {
                     </span>
                   )}
                 </div>
-                <div className="mt-2 text-lg font-semibold text-slate-100">{s.title}</div>
-                <div className="text-xs text-slate-400">{s.subtitle}</div>
-                <p className="mt-2 line-clamp-2 text-xs text-slate-500">{s.learningObjective}</p>
+                <div className="relative z-10 mt-3 text-xl font-bold text-slate-100 transition-colors group-hover:text-white">{s.title}</div>
+                <div className="relative z-10 text-xs text-slate-400">{s.subtitle}</div>
+                <p className="relative z-10 mt-3 line-clamp-2 text-xs leading-relaxed text-slate-500 transition-colors group-hover:text-slate-400">{s.learningObjective}</p>
               </button>
             );
           })}

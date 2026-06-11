@@ -53,6 +53,10 @@ export interface ColdgridState {
   selectedNodeId: string | null;
   /** Shipment whose decay curve is open (null = closed). */
   selectedShipmentId: string | null;
+  /** City-wide spoilage-risk heatmap overlay toggle (Phase 8). */
+  showHeatmap: boolean;
+  /** Scripted Demo Mode is running (Phase 8). */
+  demoActive: boolean;
 
   // ── Playback actions ────────────────────────────────────────────────────
   play: () => void;
@@ -75,6 +79,11 @@ export interface ColdgridState {
   setHoveredNode: (id: string | null) => void;
   setSelectedNode: (id: string | null) => void;
   setSelectedShipment: (id: string | null) => void;
+  toggleHeatmap: () => void;
+  setHeatmap: (on: boolean) => void;
+  setDemoActive: (active: boolean) => void;
+  /** Reset to a fixed seed for a deterministic, repeatable run (Demo Mode). */
+  resetToSeed: (seed: number, startHourOfDay?: number) => void;
 
   // ── Derived helpers ─────────────────────────────────────────────────────
   nodeTempC: (node: CityNode) => number;
@@ -92,6 +101,8 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   hoveredNodeId: null,
   selectedNodeId: null,
   selectedShipmentId: null,
+  showHeatmap: false,
+  demoActive: false,
 
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
@@ -124,6 +135,11 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   setHoveredNode: (id) => set({ hoveredNodeId: id }),
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setSelectedShipment: (id) => set({ selectedShipmentId: id }),
+  toggleHeatmap: () => set((s) => ({ showHeatmap: !s.showHeatmap })),
+  setHeatmap: (on) => set({ showHeatmap: on }),
+  setDemoActive: (active) => set({ demoActive: active }),
+  resetToSeed: (seed, startHourOfDay) =>
+    set({ sim: createSimulation(seed, { startHourOfDay }), isPlaying: false }),
 
   nodeTempC: (node) => {
     const { hourOfDay, scenarioOffsetC } = get().sim;

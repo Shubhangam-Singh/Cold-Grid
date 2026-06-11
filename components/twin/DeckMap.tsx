@@ -7,10 +7,12 @@
  * basemap (RULE 3).
  */
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import DeckGL from "@deck.gl/react";
 import { PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
-import type { PickingInfo } from "@deck.gl/core";
+import { TripsLayer } from "@deck.gl/geo-layers";
+import { HeatmapLayer } from "@deck.gl/aggregation-layers";
+import type { Color, PickingInfo } from "@deck.gl/core";
 import { Map } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -22,7 +24,12 @@ import {
   getNode,
   nodeHoldingTempC,
 } from "@/lib/city/chennai";
-import { createBatch, predictedShelfLifeHours } from "@/lib/engine/spoilage";
+import {
+  baseRate,
+  celsiusToKelvin,
+  createBatch,
+  predictedShelfLifeHours,
+} from "@/lib/engine/spoilage";
 import type { Shipment } from "@/lib/engine/simulation";
 import { getProduce } from "@/lib/engine/produce";
 import { useColdgridStore } from "@/store/coldgridStore";
@@ -43,8 +50,41 @@ const MONO = "var(--font-mono), monospace";
 
 interface RouteDatum {
   path: [number, number][];
+  timestamps: number[];
   quality: number;
   active: boolean;
+}
+
+interface RiskPoint {
+  position: [number, number];
+  weight: number;
+}
+
+// Spoilage-risk heatmap ramp (low → high): green → amber → red.
+const RISK_COLORS: Color[] = [
+  [26, 152, 80],
+  [145, 207, 96],
+  [217, 239, 139],
+  [254, 224, 139],
+  [252, 141, 89],
+  [215, 48, 39],
+];
+
+function clamp01(x: number): number {
+  return Math.max(0, Math.min(1, x));
+}
+
+/**
+ * Spoilage-risk weight of a node: the engine's dimensionless degradation rate
+ * for its representative produce at its current holding temperature, normalized.
+ * Refrigerated hubs read ~0; hot unrefrigerated nodes read high.
+ */
+function nodeRisk(node: CityNode, hourOfDay: number, scenarioOffsetC: number): number {
+  const pid = node.handles && node.handles.length > 0 ? node.handles[0] : "milk";
+  const profile = getProduce(pid);
+  const tempC = nodeHoldingTempC(node, hourOfDay, scenarioOffsetC);
+  const rate = baseRate(celsiusToKelvin(tempC), profile.eaBase, profile);
+  return clamp01((rate - 0.5) / 6);
 }
 
 function nodeTooltipHtml(node: CityNode, tempC: number): string {
@@ -108,6 +148,19 @@ export default function DeckMap() {
   const setHoveredNode = useColdgridStore((s) => s.setHoveredNode);
   const setSelectedNode = useColdgridStore((s) => s.setSelectedNode);
   const setSelectedShipment = useColdgridStore((s) => s.setSelectedShipment);
+  const showHeatmap = useColdgridStore((s) => s.showHeatmap);
+
+  // Global time loop for pulsing TripsLayer (0 to 100)
+  const [time, setTime] = useState(0);
+  useEffect(() => {
+    let animationFrame: number;
+    const animate = () => {
+      setTime((t) => (t + 1) % 100);
+      animationFrame = requestAnimationFrame(animate);
+    };
+    animate();
+    return () => cancelAnimationFrame(animationFrame);
+  }, []);
 
   const tempOf = (node: CityNode) =>
     nodeHoldingTempC(node, hourOfDay, scenarioOffsetC);
@@ -117,19 +170,51 @@ export default function DeckMap() {
     [shipments]
   );
 
+  const riskData = useMemo<RiskPoint[]>(() => {
+    if (!showHeatmap) return [];
+    const points: RiskPoint[] = nodes
+      .map((n) => ({ position: n.coordinates, weight: nodeRisk(n, hourOfDay, scenarioOffsetC) }))
+      .filter((p) => p.weight > 0.05);
+    for (const s of inTransit) {
+      points.push({
+        position: s.position,
+        weight: clamp01(0.3 + (1 - s.batch.quality / 100) * 1.2),
+      });
+    }
+    return points;
+  }, [showHeatmap, nodes, inTransit, hourOfDay, scenarioOffsetC]);
+
   const routeData = useMemo<RouteDatum[]>(
     () =>
       inTransit.flatMap((s) =>
-        s.route.map((edgeId, i) => ({
-          path: edgePath(getEdge(edgeId)),
-          quality: s.batch.quality,
-          active: i === s.legIndex,
-        }))
+        s.route.map((edgeId, i) => {
+          const path = edgePath(getEdge(edgeId));
+          const timestamps = path.map((_, idx) => (idx / Math.max(1, path.length - 1)) * 100);
+          return {
+            path,
+            timestamps,
+            quality: s.batch.quality,
+            active: i === s.legIndex,
+          };
+        })
       ),
     [inTransit]
   );
 
   const layers = useMemo(() => {
+    const heatLayer = new HeatmapLayer<RiskPoint>({
+      id: "risk-heat",
+      data: riskData,
+      getPosition: (d) => d.position,
+      getWeight: (d) => d.weight,
+      radiusPixels: 75,
+      intensity: 1.1,
+      threshold: 0.05,
+      colorRange: RISK_COLORS,
+      aggregation: "SUM",
+      pickable: false,
+    });
+
     const roadLayer = new PathLayer<CityEdge>({
       id: "roads",
       data: edges,
@@ -152,6 +237,23 @@ export default function DeckMap() {
       capRounded: true,
       jointRounded: true,
       pickable: false,
+    });
+
+    const routeTrips = new TripsLayer<RouteDatum>({
+      id: "route-trips",
+      data: routeData.filter((d) => d.active),
+      getPath: (d) => d.path,
+      getTimestamps: (d) => d.timestamps,
+      getColor: (d) => qualityToRgb(d.quality),
+      opacity: 1.0,
+      widthMinPixels: 4,
+      trailLength: 40,
+      currentTime: time,
+      capRounded: true,
+      jointRounded: true,
+      updateTriggers: {
+        getColor: [routeData],
+      },
     });
 
     const nodeLayer = new ScatterplotLayer<CityNode>({
@@ -233,13 +335,16 @@ export default function DeckMap() {
       pickable: false,
     });
 
-    return [roadLayer, routeHighlight, shipmentHalo, nodeLayer, shipmentLayer, labelLayer];
+    const base = [roadLayer, routeHighlight, routeTrips, shipmentHalo, nodeLayer, shipmentLayer, labelLayer];
+    return showHeatmap ? [heatLayer, ...base] : base;
     // tempOf closes over hourOfDay/scenarioOffsetC; listed below so layers rebuild.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     nodes,
     edges,
     routeData,
+    riskData,
+    showHeatmap,
     inTransit,
     hourOfDay,
     scenarioOffsetC,
@@ -248,6 +353,7 @@ export default function DeckMap() {
     setHoveredNode,
     setSelectedNode,
     setSelectedShipment,
+    time,
   ]);
 
   return (

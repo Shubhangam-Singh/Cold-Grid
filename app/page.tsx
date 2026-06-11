@@ -1,5 +1,6 @@
 import TwinScreen from "@/components/twin/TwinScreen";
 import MetricsBar from "@/components/dashboard/MetricsBar";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -18,13 +19,13 @@ export default function Home() {
           <span className="hidden font-mono text-[11px] text-slate-400 sm:block">
             13.0827° N · 80.2707° E · Tamil Nadu
           </span>
-          <a
+          <Link
             href="/academy"
             className="group relative overflow-hidden rounded-md border border-twin-amber/40 bg-twin-amber/10 px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-twin-amber transition-all duration-300 hover:scale-105 hover:bg-twin-amber/20 hover:shadow-[0_0_15px_rgba(255,176,0,0.3)]"
           >
             <span className="relative z-10">Academy →</span>
             <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-twin-amber/20 to-transparent group-hover:animate-[shimmer_1.5s_infinite]"></div>
-          </a>
+          </Link>
         </div>
       </header>
 

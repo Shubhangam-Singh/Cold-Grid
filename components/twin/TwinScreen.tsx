@@ -13,6 +13,7 @@ import SimControls from "./SimControls";
 import ShipmentPanel from "./ShipmentPanel";
 import SimulationClock from "./SimulationClock";
 import ShipmentDecayModal from "./ShipmentDecayModal";
+import DemoMode from "./DemoMode";
 import CopilotPanel from "@/components/learning/CopilotPanel";
 
 const DeckMap = dynamic(() => import("./DeckMap"), {
@@ -42,6 +43,7 @@ export default function TwinScreen() {
       </div>
       <MapLegend />
       <CopilotPanel />
+      <DemoMode />
       <ShipmentDecayModal />
     </div>
   );
