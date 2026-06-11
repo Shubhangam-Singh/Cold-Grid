@@ -16,7 +16,7 @@ function formatHour(hour: number): string {
 }
 
 export default function CityClock() {
-  const hourOfDay = useColdgridStore((s) => s.hourOfDay);
+  const hourOfDay = useColdgridStore((s) => s.sim.hourOfDay);
   const setHourOfDay = useColdgridStore((s) => s.setHourOfDay);
   const ambientC = useColdgridStore((s) => s.currentAmbientC());
 

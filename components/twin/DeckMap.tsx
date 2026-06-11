@@ -1,16 +1,15 @@
 "use client";
 
 /**
- * The Twin map (Phase 3): a free, no-API-key Carto dark basemap (RULE 3) with
- * deck.gl overlays — the Chennai road network, and the city's food-infrastructure
- * nodes drawn as rings whose color encodes live holding temperature.
- *
- * No shipment movement yet (that is Phase 4) — static nodes on a control-room map.
+ * The Twin map (Phase 4): the Chennai network + nodes (rings colored by holding
+ * temperature) plus LIVE shipments — deck.gl arcs along their route and a moving
+ * marker colored by the engine's live quality, all on a free no-key Carto dark
+ * basemap (RULE 3).
  */
 
 import { useMemo } from "react";
 import DeckGL from "@deck.gl/react";
-import { LineLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { ArcLayer, LineLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import type { PickingInfo } from "@deck.gl/core";
 import { Map } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -18,18 +17,16 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import {
   type CityEdge,
   type CityNode,
+  getEdge,
   getNode,
   nodeHoldingTempC,
 } from "@/lib/city/chennai";
-import {
-  createBatch,
-  predictedShelfLifeHours,
-} from "@/lib/engine/spoilage";
+import { createBatch, predictedShelfLifeHours } from "@/lib/engine/spoilage";
+import type { Shipment } from "@/lib/engine/simulation";
 import { getProduce } from "@/lib/engine/produce";
 import { useColdgridStore } from "@/store/coldgridStore";
-import { NODE_TYPE_STYLE, rgbCss, tempToRgb } from "./colors";
+import { NODE_TYPE_STYLE, qualityToRgb, rgbCss, tempToRgb } from "./colors";
 
-// Free, no-key dark basemap (Carto dark-matter). RULE 3.
 const CARTO_DARK =
   "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 
@@ -43,43 +40,64 @@ const INITIAL_VIEW_STATE = {
 
 const MONO = "var(--font-mono), monospace";
 
-function tooltipHtml(node: CityNode, tempC: number): string {
+interface ArcDatum {
+  from: [number, number];
+  to: [number, number];
+  quality: number;
+  active: boolean;
+}
+
+function nodeTooltipHtml(node: CityNode, tempC: number): string {
   const style = NODE_TYPE_STYLE[node.type];
   const tempColor = rgbCss(tempToRgb(tempC));
   const fridge = node.refrigeration
     ? `Refrigerated · setpoint ${node.refrigeration.setpointC.toFixed(0)}°C`
     : "Unrefrigerated · tracks ambient";
-
   let produceBlock = "";
   if (node.handles && node.handles.length > 0) {
     const pid = node.handles[0];
     const profile = getProduce(pid);
     const pred = predictedShelfLifeHours(createBatch("hover", pid), profile, tempC);
-    produceBlock = `
-      <div style="margin-top:6px;color:#94a3b8">Handles: ${node.handles
-        .map((h) => getProduce(h).label)
-        .join(", ")}</div>
+    produceBlock = `<div style="margin-top:6px;color:#94a3b8">Handles: ${node.handles
+      .map((h) => getProduce(h).label)
+      .join(", ")}</div>
       <div style="margin-top:2px">${profile.label} fresh life @ <span style="font-family:${MONO};color:${tempColor}">${tempC.toFixed(
         1
       )}°C</span>: <span style="font-family:${MONO}">~${pred.toFixed(0)} h</span></div>`;
   }
-
-  return `
-    <div style="font-weight:600;font-size:13px">${style.glyph} ${node.name}</div>
+  return `<div style="font-weight:600;font-size:13px">${style.glyph} ${node.name}</div>
     <div style="text-transform:uppercase;letter-spacing:0.08em;font-size:10px;color:#64748b;margin-top:2px">${node.type}</div>
     <div style="margin-top:6px">Holding temp: <span style="font-family:${MONO};color:${tempColor};font-weight:600">${tempC.toFixed(
       1
     )}°C</span></div>
     <div style="color:#94a3b8;font-size:11px">${fridge}</div>
-    ${produceBlock}
-    <div style="margin-top:6px;color:#64748b;font-size:11px;line-height:1.35">${node.description}</div>`;
+    ${produceBlock}`;
+}
+
+function shipmentTooltipHtml(s: Shipment): string {
+  const profile = getProduce(s.produce);
+  const qColor = rgbCss(qualityToRgb(s.batch.quality));
+  const tColor = rgbCss(tempToRgb(s.lastTempC));
+  const pred = predictedShelfLifeHours(s.batch, profile, s.lastTempC);
+  const spoiled = s.batch.quality <= 0;
+  return `<div style="font-weight:600;font-size:13px">${profile.label} shipment ${s.id}</div>
+    <div style="font-size:10px;color:#64748b;margin-top:2px">${getNode(s.originId).name} → ${getNode(s.destinationId).name}</div>
+    <div style="margin-top:6px">Quality: <span style="font-family:${MONO};color:${qColor};font-weight:600">${s.batch.quality.toFixed(
+      0
+    )}%</span>${spoiled ? ' <span style="color:#ef4444">⚠ SPOILED</span>' : ""}</div>
+    <div>Cargo temp: <span style="font-family:${MONO};color:${tColor}">${s.lastTempC.toFixed(
+      1
+    )}°C</span> · RH <span style="font-family:${MONO}">${s.lastRH.toFixed(0)}%</span></div>
+    <div>Est. life left @ temp: <span style="font-family:${MONO}">~${pred.toFixed(1)} h</span></div>
+    <div style="color:#94a3b8;font-size:11px;margin-top:4px">Thermal breaches: ${s.batch.breachTicks} ticks</div>`;
 }
 
 export default function DeckMap() {
   const nodes = useColdgridStore((s) => s.nodes);
   const edges = useColdgridStore((s) => s.edges);
-  const hourOfDay = useColdgridStore((s) => s.hourOfDay);
-  const scenarioOffsetC = useColdgridStore((s) => s.scenarioOffsetC);
+  const hourOfDay = useColdgridStore((s) => s.sim.hourOfDay);
+  const scenarioOffsetC = useColdgridStore((s) => s.sim.scenarioOffsetC);
+  const shipments = useColdgridStore((s) => s.sim.shipments);
   const hoveredNodeId = useColdgridStore((s) => s.hoveredNodeId);
   const selectedNodeId = useColdgridStore((s) => s.selectedNodeId);
   const setHoveredNode = useColdgridStore((s) => s.setHoveredNode);
@@ -88,14 +106,48 @@ export default function DeckMap() {
   const tempOf = (node: CityNode) =>
     nodeHoldingTempC(node, hourOfDay, scenarioOffsetC);
 
+  const inTransit = useMemo(
+    () => shipments.filter((s) => s.status === "in-transit"),
+    [shipments]
+  );
+
+  const arcData = useMemo<ArcDatum[]>(
+    () =>
+      inTransit.flatMap((s) =>
+        s.route.map((edgeId, i) => {
+          const e = getEdge(edgeId);
+          return {
+            from: getNode(e.from).coordinates,
+            to: getNode(e.to).coordinates,
+            quality: s.batch.quality,
+            active: i === s.legIndex,
+          };
+        })
+      ),
+    [inTransit]
+  );
+
   const layers = useMemo(() => {
     const edgeLayer = new LineLayer<CityEdge>({
       id: "edges",
       data: edges,
       getSourcePosition: (e) => getNode(e.from).coordinates,
       getTargetPosition: (e) => getNode(e.to).coordinates,
-      getColor: (e) => (e.floodProne ? [120, 83, 28, 200] : [51, 65, 85, 160]),
+      getColor: (e) => (e.floodProne ? [120, 83, 28, 200] : [51, 65, 85, 150]),
       getWidth: 1.5,
+      widthUnits: "pixels",
+      pickable: false,
+    });
+
+    const routeArcs = new ArcLayer<ArcDatum>({
+      id: "route-arcs",
+      data: arcData,
+      getSourcePosition: (d) => d.from,
+      getTargetPosition: (d) => d.to,
+      getSourceColor: (d) => [...qualityToRgb(d.quality), d.active ? 230 : 90],
+      getTargetColor: (d) => [...qualityToRgb(d.quality), d.active ? 230 : 90],
+      getWidth: (d) => (d.active ? 3 : 1.5),
+      getHeight: 0.25,
       widthUnits: "pixels",
       pickable: false,
     });
@@ -130,6 +182,34 @@ export default function DeckMap() {
       },
     });
 
+    const shipmentHalo = new ScatterplotLayer<Shipment>({
+      id: "shipment-halo",
+      data: inTransit,
+      getPosition: (s) => s.position,
+      radiusUnits: "pixels",
+      getRadius: 16,
+      getFillColor: (s) => [...qualityToRgb(s.batch.quality), 55],
+      pickable: false,
+    });
+
+    const shipmentLayer = new ScatterplotLayer<Shipment>({
+      id: "shipments",
+      data: inTransit,
+      getPosition: (s) => s.position,
+      radiusUnits: "pixels",
+      getRadius: 7,
+      stroked: true,
+      filled: true,
+      getFillColor: (s) => qualityToRgb(s.batch.quality),
+      getLineColor: [226, 232, 240],
+      lineWidthUnits: "pixels",
+      getLineWidth: 1.5,
+      pickable: true,
+      autoHighlight: true,
+      highlightColor: [255, 255, 255, 60],
+      updateTriggers: { getFillColor: [inTransit] },
+    });
+
     const labelLayer = new TextLayer<CityNode>({
       id: "labels",
       data: nodes,
@@ -149,12 +229,14 @@ export default function DeckMap() {
       pickable: false,
     });
 
-    return [edgeLayer, nodeLayer, labelLayer];
+    return [edgeLayer, routeArcs, shipmentHalo, nodeLayer, shipmentLayer, labelLayer];
     // tempOf closes over hourOfDay/scenarioOffsetC; listed below so layers rebuild.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     nodes,
     edges,
+    arcData,
+    inTransit,
     hourOfDay,
     scenarioOffsetC,
     hoveredNodeId,
@@ -169,10 +251,19 @@ export default function DeckMap() {
       controller={true}
       layers={layers}
       getCursor={({ isHovering }) => (isHovering ? "pointer" : "grab")}
-      getTooltip={(info: PickingInfo<CityNode>) => {
+      getTooltip={(info: PickingInfo) => {
         if (!info.object) return null;
+        const layerId = info.layer?.id;
+        let html: string | null = null;
+        if (layerId === "nodes") {
+          const node = info.object as CityNode;
+          html = nodeTooltipHtml(node, tempOf(node));
+        } else if (layerId === "shipments") {
+          html = shipmentTooltipHtml(info.object as Shipment);
+        }
+        if (!html) return null;
         return {
-          html: tooltipHtml(info.object, tempOf(info.object)),
+          html,
           style: {
             backgroundColor: "rgba(2,6,23,0.96)",
             color: "#e2e8f0",
@@ -181,7 +272,7 @@ export default function DeckMap() {
             padding: "10px 12px",
             fontSize: "12px",
             fontFamily: "var(--font-sans), sans-serif",
-            maxWidth: "260px",
+            maxWidth: "270px",
             boxShadow: "0 10px 30px rgba(0,0,0,0.55)",
           },
         };
