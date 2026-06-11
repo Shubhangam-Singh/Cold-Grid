@@ -10,7 +10,7 @@ export default function Home() {
             ColdGrid
           </span>
           <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-emerald-400">
-            Chennai Twin
+            Chennai Twin · Live
           </span>
         </div>
         <div className="hidden font-mono text-[11px] text-slate-500 sm:block">
