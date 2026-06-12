@@ -24,6 +24,7 @@ import {
   clearDelivered,
   createSimulation,
   dispatchShipment,
+  resolveCrisis,
   stepSimulation,
 } from "@/lib/engine/simulation";
 
@@ -58,6 +59,10 @@ export interface ColdgridState {
   /** Scripted Demo Mode is running (Phase 8). */
   demoActive: boolean;
 
+  // ── Route selection modal ───────────────────────────────────────────────
+  /** Pending dispatch options waiting for route selection. Null = modal closed. */
+  pendingDispatch: Omit<DispatchOptions, 'route'> | null;
+
   // ── Playback actions ────────────────────────────────────────────────────
   play: () => void;
   pause: () => void;
@@ -70,6 +75,11 @@ export interface ColdgridState {
   resetSim: () => void;
   /** Replace the whole simulation state (used by the Academy to load a scenario). */
   loadSim: (sim: SimulationState) => void;
+  /** Resolve a crisis event with a chosen option. */
+  resolveCrisis: (crisisId: string, optionId: string) => void;
+
+  // ── Route selection actions ─────────────────────────────────────────────
+  setPendingDispatch: (opts: Omit<DispatchOptions, 'route'> | null) => void;
 
   // ── Environment actions ─────────────────────────────────────────────────
   setHourOfDay: (hour: number) => void;
@@ -103,6 +113,7 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   selectedShipmentId: null,
   showHeatmap: false,
   demoActive: false,
+  pendingDispatch: null,
 
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
@@ -111,21 +122,22 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
 
   advance: (dtHours) =>
     set((s) => {
-      // Explicit dt → a single step (tests). Otherwise advance `speed` fixed
-      // SIM_DT_HOURS steps so the trajectory is speed-independent.
       if (dtHours != null) return { sim: stepSimulation(s.sim, dtHours) };
-      let sim = s.sim;
-      for (let i = 0; i < s.speed; i++) sim = stepSimulation(sim, SIM_DT_HOURS);
-      return { sim };
+      return { sim: stepSimulation(s.sim, SIM_DT_HOURS) };
     }),
 
-  dispatch: (opts) => set((s) => ({ sim: dispatchShipment(s.sim, opts) })),
+  dispatch: (opts) => set((s) => ({ sim: dispatchShipment(s.sim, opts), pendingDispatch: null })),
 
   clearDelivered: () => set((s) => ({ sim: clearDelivered(s.sim) })),
 
   resetSim: () => set({ sim: createSimulation(SEED), isPlaying: false }),
 
   loadSim: (sim) => set({ sim, isPlaying: false }),
+
+  resolveCrisis: (crisisId, optionId) =>
+    set((s) => ({ sim: resolveCrisis(s.sim, crisisId, optionId) })),
+
+  setPendingDispatch: (opts) => set({ pendingDispatch: opts }),
 
   setHourOfDay: (hour) =>
     set((s) => ({ sim: { ...s.sim, hourOfDay: ((hour % 24) + 24) % 24 } })),

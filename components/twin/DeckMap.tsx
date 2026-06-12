@@ -9,7 +9,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import DeckGL from "@deck.gl/react";
-import { PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { PathLayer, ScatterplotLayer, TextLayer, IconLayer } from "@deck.gl/layers";
 import { TripsLayer } from "@deck.gl/geo-layers";
 import { HeatmapLayer } from "@deck.gl/aggregation-layers";
 import type { Color, PickingInfo } from "@deck.gl/core";
@@ -23,6 +23,7 @@ import {
   getEdge,
   getNode,
   nodeHoldingTempC,
+  trafficMultiplier,
 } from "@/lib/city/chennai";
 import {
   baseRate,
@@ -32,7 +33,8 @@ import {
 } from "@/lib/engine/spoilage";
 import type { Shipment } from "@/lib/engine/simulation";
 import { getProduce } from "@/lib/engine/produce";
-import { useColdgridStore } from "@/store/coldgridStore";
+import { getDriver } from "@/lib/engine/drivers";
+import { useColdgridStore, TICK_INTERVAL_MS } from "@/store/coldgridStore";
 import { NODE_TYPE_STYLE, qualityToRgb, rgbCss, tempToRgb } from "./colors";
 
 const CARTO_DARK =
@@ -114,8 +116,65 @@ function nodeTooltipHtml(node: CityNode, tempC: number): string {
     ${produceBlock}`;
 }
 
+function getTopDownTruckSvg(driverId: string) {
+  const colorMap: Record<string, string> = {
+    kumar: "#f8fafc", // white
+    ravi: "#fee2e2", // light red
+    priya: "#dcfce7", // light green
+    deepak: "#e0f2fe", // light blue
+  };
+  const color = colorMap[driverId] || "#f8fafc";
+  const stroke = driverId === "kumar" ? "#cbd5e1" :
+                 driverId === "ravi" ? "#fca5a5" :
+                 driverId === "priya" ? "#86efac" : "#7dd3fc";
+
+  const svg = `
+<svg width="64" height="128" viewBox="0 0 64 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3" />
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <!-- Side Mirrors -->
+    <rect x="6" y="16" width="6" height="12" rx="2" fill="#334155" />
+    <rect x="52" y="16" width="6" height="12" rx="2" fill="#334155" />
+
+    <!-- Cab Base (hood to back of cab) -->
+    <path d="M 14 24 C 14 6, 50 6, 50 24 L 50 40 L 14 40 Z" fill="#f1f5f9"/>
+    
+    <!-- Bumper -->
+    <rect x="16" y="6" width="32" height="4" rx="2" fill="#64748b"/>
+
+    <!-- Headlights -->
+    <rect x="18" y="5" width="8" height="4" rx="2" fill="#fef08a" />
+    <rect x="38" y="5" width="8" height="4" rx="2" fill="#fef08a" />
+    
+    <!-- Windshield -->
+    <path d="M 18 20 C 18 10, 46 10, 46 20 L 46 28 C 46 30, 18 30, 18 28 Z" fill="#0f172a"/>
+    
+    <!-- Cargo Box -->
+    <rect x="8" y="38" width="48" height="84" rx="4" fill="${color}" stroke="${stroke}" stroke-width="2"/>
+    
+    <!-- Taillights -->
+    <rect x="12" y="120" width="10" height="4" rx="2" fill="#ef4444" />
+    <rect x="42" y="120" width="10" height="4" rx="2" fill="#ef4444" />
+    
+    <!-- Roof details on cargo box -->
+    <line x1="8" y1="48" x2="56" y2="48" stroke="${stroke}" stroke-width="1.5" opacity="0.6" />
+    <line x1="8" y1="64" x2="56" y2="64" stroke="${stroke}" stroke-width="1.5" opacity="0.6" />
+    <line x1="8" y1="80" x2="56" y2="80" stroke="${stroke}" stroke-width="1.5" opacity="0.6" />
+    <line x1="8" y1="96" x2="56" y2="96" stroke="${stroke}" stroke-width="1.5" opacity="0.6" />
+    <line x1="8" y1="112" x2="56" y2="112" stroke="${stroke}" stroke-width="1.5" opacity="0.6" />
+  </g>
+</svg>
+`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.trim())}`;
+}
+
 function shipmentTooltipHtml(s: Shipment): string {
   const profile = getProduce(s.produce);
+  const driver = getDriver(s.driverId);
   const qColor = rgbCss(qualityToRgb(s.batch.quality));
   const tColor = rgbCss(tempToRgb(s.lastTempC));
   const pred = predictedShelfLifeHours(s.batch, profile, s.lastTempC);
@@ -126,6 +185,7 @@ function shipmentTooltipHtml(s: Shipment): string {
       : "Ambient truck";
   return `<div style="font-weight:600;font-size:13px">${profile.label} shipment ${s.id}</div>
     <div style="font-size:10px;color:#64748b;margin-top:2px">${getNode(s.originId).name} → ${getNode(s.destinationId).name} · ${transport}</div>
+    <div style="font-size:10px;color:#94a3b8;margin-top:2px">${driver.avatar} ${driver.name} · ${driver.title}</div>
     <div style="margin-top:6px">Quality: <span style="font-family:${MONO};color:${qColor};font-weight:600">${s.batch.quality.toFixed(
       0
     )}%</span>${spoiled ? ' <span style="color:#ef4444">⚠ SPOILED</span>' : ""}</div>
@@ -149,6 +209,7 @@ export default function DeckMap() {
   const setSelectedNode = useColdgridStore((s) => s.setSelectedNode);
   const setSelectedShipment = useColdgridStore((s) => s.setSelectedShipment);
   const showHeatmap = useColdgridStore((s) => s.showHeatmap);
+  const speed = useColdgridStore((s) => s.speed);
 
   // Global time loop for pulsing TripsLayer (0 to 100)
   const [time, setTime] = useState(0);
@@ -227,6 +288,35 @@ export default function DeckMap() {
       pickable: false,
     });
 
+    // Traffic congestion overlay: congestionProne roads glow amber/red during rush
+    const congestionData = edges.filter((e) => e.congestionProne);
+    const trafficLayer = new PathLayer<CityEdge>({
+      id: "traffic-heat",
+      data: congestionData,
+      getPath: (e) => edgePath(e),
+      getColor: (e) => {
+        const mult = trafficMultiplier(hourOfDay, e.congestionProne);
+        const intensity = Math.min(1, (mult - 1) / 1.5); // 0 at mult=1, 1 at mult=2.5
+        if (intensity < 0.05) return [0, 0, 0, 0]; // invisible at off-peak
+        const r = Math.round(255 * Math.min(1, intensity * 1.5));
+        const g = Math.round(180 * (1 - intensity * 0.7));
+        const a = Math.round(intensity * 120);
+        return [r, g, 30, a];
+      },
+      getWidth: (e) => {
+        const mult = trafficMultiplier(hourOfDay, e.congestionProne);
+        return 2 + (mult - 1) * 3; // thicker = more congested
+      },
+      widthUnits: "pixels",
+      capRounded: true,
+      jointRounded: true,
+      pickable: false,
+      updateTriggers: {
+        getColor: [hourOfDay],
+        getWidth: [hourOfDay],
+      },
+    });
+
     const routeHighlight = new PathLayer<RouteDatum>({
       id: "route-paths",
       data: routeData,
@@ -256,64 +346,74 @@ export default function DeckMap() {
       },
     });
 
-    const nodeLayer = new ScatterplotLayer<CityNode>({
+    const nodeLayer = new TextLayer<CityNode>({
       id: "nodes",
       data: nodes,
       getPosition: (n) => n.coordinates,
-      radiusUnits: "pixels",
-      getRadius: (n) => NODE_TYPE_STYLE[n.type].radiusPx,
-      stroked: true,
-      filled: true,
-      getFillColor: (n) => {
-        const f = NODE_TYPE_STYLE[n.type].fill;
-        return [f[0], f[1], f[2], 230];
+      characterSet: ["▲", "■", "●"],
+      getText: (n) => NODE_TYPE_STYLE[n.type].glyph,
+      getColor: (n) => tempToRgb(tempOf(n)),
+      getSize: (n) => {
+        const base = NODE_TYPE_STYLE[n.type].radiusPx * 2.8;
+        return n.id === selectedNodeId ? base * 1.3 : n.id === hoveredNodeId ? base * 1.15 : base;
       },
-      getLineColor: (n) => tempToRgb(tempOf(n)),
-      lineWidthUnits: "pixels",
-      getLineWidth: (n) =>
-        n.id === selectedNodeId ? 5 : n.id === hoveredNodeId ? 4 : 2.5,
-      radiusMinPixels: 4,
+      sizeUnits: "pixels",
+      fontFamily: "system-ui, sans-serif",
+      getTextAnchor: "middle",
+      getAlignmentBaseline: "center",
       pickable: true,
       autoHighlight: true,
-      highlightColor: [255, 255, 255, 40],
+      highlightColor: [255, 255, 255, 60],
       onHover: (info: PickingInfo<CityNode>) =>
         setHoveredNode(info.object ? info.object.id : null),
       onClick: (info: PickingInfo<CityNode>) =>
         setSelectedNode(info.object ? info.object.id : null),
       updateTriggers: {
-        getLineColor: [hourOfDay, scenarioOffsetC],
-        getLineWidth: [hoveredNodeId, selectedNodeId],
+        getColor: [hourOfDay, scenarioOffsetC],
+        getSize: [hoveredNodeId, selectedNodeId],
       },
     });
+
+    const transitionDuration = TICK_INTERVAL_MS / speed;
 
     const shipmentHalo = new ScatterplotLayer<Shipment>({
       id: "shipment-halo",
       data: inTransit,
       getPosition: (s) => s.position,
       radiusUnits: "pixels",
-      getRadius: 16,
-      getFillColor: (s) => [...qualityToRgb(s.batch.quality), 55],
+      getRadius: 22, // Adjusted for smaller truck
+      getFillColor: (s) => [...qualityToRgb(s.batch.quality), 90], // Brighter glow
       pickable: false,
+      updateTriggers: { getFillColor: [inTransit] },
+      transitions: {
+        getPosition: { duration: transitionDuration, easing: (t: number) => t },
+      },
     });
 
-    const shipmentLayer = new ScatterplotLayer<Shipment>({
+    const shipmentLayer = new IconLayer<Shipment>({
       id: "shipments",
       data: inTransit,
       getPosition: (s) => s.position,
-      radiusUnits: "pixels",
-      getRadius: 7,
-      stroked: true,
-      filled: true,
-      getFillColor: (s) => qualityToRgb(s.batch.quality),
-      getLineColor: [226, 232, 240],
-      lineWidthUnits: "pixels",
-      getLineWidth: 1.5,
+      getIcon: (s) => ({
+        url: getTopDownTruckSvg(s.driverId),
+        width: 64,
+        height: 128,
+        anchorY: 64,
+      }),
+      getSize: 45, // Slightly smaller
+      getAngle: (s) => s.angle || 0,
+      sizeUnits: "pixels",
+      sizeScale: 1,
       pickable: true,
       autoHighlight: true,
-      highlightColor: [255, 255, 255, 60],
+      highlightColor: [255, 255, 255, 100],
       onClick: (info: PickingInfo<Shipment>) =>
         setSelectedShipment(info.object ? info.object.id : null),
-      updateTriggers: { getFillColor: [inTransit] },
+      updateTriggers: { getIcon: [inTransit], getAngle: [inTransit] },
+      transitions: {
+        getPosition: { duration: transitionDuration, easing: (t: number) => t },
+        getAngle: { duration: transitionDuration, easing: (t: number) => t },
+      },
     });
 
     const labelLayer = new TextLayer<CityNode>({
@@ -335,7 +435,7 @@ export default function DeckMap() {
       pickable: false,
     });
 
-    const base = [roadLayer, routeHighlight, routeTrips, shipmentHalo, nodeLayer, shipmentLayer, labelLayer];
+    const base = [roadLayer, trafficLayer, routeHighlight, routeTrips, shipmentHalo, nodeLayer, shipmentLayer, labelLayer];
     return showHeatmap ? [heatLayer, ...base] : base;
     // tempOf closes over hourOfDay/scenarioOffsetC; listed below so layers rebuild.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -354,6 +454,7 @@ export default function DeckMap() {
     setSelectedNode,
     setSelectedShipment,
     time,
+    speed,
   ]);
 
   return (

@@ -232,7 +232,7 @@ describe("purity (no input mutation)", () => {
     let s = createSimulation(1);
     s = dispatchShipment(s, { produce: "fish", fromId: "kasimedu", toId: "mylapore" });
     const ship = s.shipments[0];
-    const ctx = { seed: 1, tick: 0, hourOfDay: 6, scenarioOffsetC: 0, dtHours: 0.1 };
+    const ctx = { seed: 1, tick: 0, hourOfDay: 6, scenarioOffsetC: 0, dtHours: 0.1, closedEdgeIds: [] as string[] };
     const advanced = advanceShipment(ship, ctx);
     expect(advanced).not.toBe(ship);
     expect(ship.batch.ageHours).toBe(0); // original untouched

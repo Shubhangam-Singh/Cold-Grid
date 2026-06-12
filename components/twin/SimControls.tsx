@@ -51,6 +51,7 @@ export default function SimControls() {
   const togglePlay = useColdgridStore((s) => s.togglePlay);
   const setSpeed = useColdgridStore((s) => s.setSpeed);
   const dispatch = useColdgridStore((s) => s.dispatch);
+  const setPendingDispatch = useColdgridStore((s) => s.setPendingDispatch);
   const clearDelivered = useColdgridStore((s) => s.clearDelivered);
   const resetSim = useColdgridStore((s) => s.resetSim);
   const setScenarioOffsetC = useColdgridStore((s) => s.setScenarioOffsetC);
@@ -90,7 +91,7 @@ export default function SimControls() {
 
   const dispatchCustom = () => {
     if (!canDispatch) return;
-    dispatch({ produce, fromId, toId, transportSetpointC: reefer ? setpoint : null });
+    setPendingDispatch({ produce, fromId, toId, transportSetpointC: reefer ? setpoint : null });
   };
 
   return (
@@ -119,7 +120,7 @@ export default function SimControls() {
         {PRESETS.map((d) => (
           <button
             key={d.label}
-            onClick={() => dispatch(d.opts)}
+            onClick={() => setPendingDispatch(d.opts)}
             className="block w-full rounded-md border border-transparent bg-slate-800/40 px-3 py-2 text-left text-xs text-slate-200 transition-all duration-300 hover:scale-[1.02] hover:bg-slate-700/60 hover:border-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-twin-cyan"
           >
             {d.label}

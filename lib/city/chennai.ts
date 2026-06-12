@@ -51,6 +51,8 @@ export interface CityEdge {
   ambientOffsetC: number;
   /** Closes during monsoon-flood scenarios (low-lying / river-crossing roads). */
   floodProne: boolean;
+  /** Inner-city roads that get heavily congested during rush hour. */
+  congestionProne: boolean;
 }
 
 /** Chennai bounding box (spec §6): all node coordinates must fall inside. */
@@ -67,6 +69,47 @@ export const CITY_BASELINE_C = 32;
 export const DIURNAL_AMPLITUDE_C = 4;
 /** Hour of day (0–24) at which ambient peaks. */
 export const DIURNAL_PEAK_HOUR = 14.5;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dynamic Traffic Model (Phase 9)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Peak congestion multiplier for congestionProne roads. */
+const PEAK_MULTIPLIER_CONGESTED = 2.5;
+/** Peak congestion multiplier for non-congestionProne roads. */
+const PEAK_MULTIPLIER_NORMAL = 1.3;
+/** Rush-hour Gaussian parameters: peakHour and sigma (spread in hours). */
+const MORNING_RUSH = { peakHour: 9, sigma: 1.2 };
+const EVENING_RUSH = { peakHour: 18, sigma: 1.5 };
+
+/** Gaussian bump centered at `peak` with spread `sigma`. */
+function gaussianBump(hour: number, peak: number, sigma: number): number {
+  const d = hour - peak;
+  return Math.exp(-(d * d) / (2 * sigma * sigma));
+}
+
+/**
+ * Dynamic traffic congestion multiplier at a given hour of day (0–24).
+ * Returns 1.0 at off-peak, up to `peakMult` during rush hour.
+ * Uses a sum-of-Gaussians model — smooth, continuous, deterministic.
+ */
+export function trafficMultiplier(hourOfDay: number, congestionProne: boolean): number {
+  const peakMult = congestionProne ? PEAK_MULTIPLIER_CONGESTED : PEAK_MULTIPLIER_NORMAL;
+  const h = ((hourOfDay % 24) + 24) % 24;
+  const bump = Math.max(
+    gaussianBump(h, MORNING_RUSH.peakHour, MORNING_RUSH.sigma),
+    gaussianBump(h, EVENING_RUSH.peakHour, EVENING_RUSH.sigma)
+  );
+  return 1 + (peakMult - 1) * bump;
+}
+
+/**
+ * Effective travel time for an edge at a specific hour, accounting for
+ * rush-hour congestion. A pure function of (edge, hour).
+ */
+export function currentTravelTimeMin(edge: CityEdge, hourOfDay: number): number {
+  return edge.travelTimeMin * trafficMultiplier(hourOfDay, edge.congestionProne);
+}
 
 /**
  * City-wide ambient at a given hour of day (fractional hours fine; periodic,
@@ -152,6 +195,37 @@ export function pointAlongPath(
   return path[path.length - 1];
 }
 
+export function pathPositionAndAngle(
+  path: [number, number][],
+  t: number
+): { position: [number, number]; angle: number } {
+  if (path.length === 0) return { position: [0, 0], angle: 0 };
+  if (path.length === 1) return { position: path[0], angle: 0 };
+  
+  const position = pointAlongPath(path, t);
+  
+  // To avoid abrupt jittering on micro-segments, we compute the angle
+  // using a small look-ahead and look-behind window.
+  // 0.02 is 2% of the path length, which smooths out sharp corners.
+  const t1 = Math.max(0, t - 0.02);
+  const t2 = Math.min(1, t + 0.02);
+  const p1 = pointAlongPath(path, t1);
+  const p2 = pointAlongPath(path, t2);
+  
+  // If the path is extremely short and p1 === p2, fallback to start/end
+  const dx = p2[0] - p1[0];
+  const dy = p2[1] - p1[1];
+  
+  if (dx === 0 && dy === 0) {
+    const start = path[0];
+    const end = path[path.length - 1];
+    return { position, angle: Math.atan2(end[0] - start[0], end[1] - start[1]) * (180 / Math.PI) };
+  }
+
+  const angle = Math.atan2(dx, dy) * (180 / Math.PI);
+  return { position, angle };
+}
+
 /** Great-circle distance between two [lon, lat] points, km. */
 export function haversineKm(a: [number, number], b: [number, number]): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -206,6 +280,16 @@ export const CHENNAI_NODES: CityNode[] = [
     handles: ["milk", "paneer"],
     description:
       "Tamil Nadu cooperative dairy complex — chilled milk and paneer dispatch.",
+  },
+  {
+    id: "ennore-port",
+    name: "Ennore Port Container Terminal",
+    type: "source",
+    coordinates: [80.323, 13.235],
+    ambientOffsetC: 1.0, // hot container yard
+    refrigeration: { setpointC: -18 }, // deep freeze imports
+    handles: ["fish", "apple"], // frozen fish exports, imported apples
+    description: "Major port for imported temperature-controlled sea freight.",
   },
 
   // ── Cold-storage hubs (intermediate) ──────────────────────────────────────
@@ -287,6 +371,33 @@ export const CHENNAI_NODES: CityNode[] = [
     description:
       "Fast-growing southern zone on former marshland — notoriously flood-prone.",
   },
+  {
+    id: "tambaram",
+    name: "Tambaram",
+    type: "retail",
+    coordinates: [80.114, 12.924],
+    ambientOffsetC: 1.5,
+    refrigeration: null,
+    description: "Far-south major residential and commercial gateway.",
+  },
+  {
+    id: "sholinganallur",
+    name: "Sholinganallur (OMR)",
+    type: "retail",
+    coordinates: [80.227, 12.901],
+    ambientOffsetC: 1.0,
+    refrigeration: null,
+    description: "Heart of the southern IT corridor — massive retail and food-service demand.",
+  },
+  {
+    id: "porur",
+    name: "Porur",
+    type: "retail",
+    coordinates: [80.158, 13.036],
+    ambientOffsetC: 1.0,
+    refrigeration: null,
+    description: "Fast-growing western residential area.",
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -297,36 +408,53 @@ export const CHENNAI_NODES: CityNode[] = [
 
 export const CHENNAI_EDGES: CityEdge[] = [
   // ── Source → hub ──────────────────────────────────────────────────────────
-  { id: "koyambedu_ambattur", from: "koyambedu", to: "hub-ambattur", travelTimeMin: 25, distanceKm: 7, ambientOffsetC: 0.5, floodProne: false },
-  { id: "koyambedu_guindy", from: "koyambedu", to: "hub-guindy", travelTimeMin: 35, distanceKm: 9, ambientOffsetC: 1.0, floodProne: false },
-  { id: "koyambedu_perambur", from: "koyambedu", to: "hub-perambur", travelTimeMin: 30, distanceKm: 8, ambientOffsetC: 1.0, floodProne: false },
-  { id: "kasimedu_perambur", from: "kasimedu", to: "hub-perambur", travelTimeMin: 30, distanceKm: 9, ambientOffsetC: -0.5, floodProne: false },
-  { id: "aavin_perambur", from: "aavin-madhavaram", to: "hub-perambur", travelTimeMin: 18, distanceKm: 5, ambientOffsetC: 0.5, floodProne: false },
-  { id: "aavin_ambattur", from: "aavin-madhavaram", to: "hub-ambattur", travelTimeMin: 35, distanceKm: 11, ambientOffsetC: 0.5, floodProne: false },
+  { id: "koyambedu_ambattur", from: "koyambedu", to: "hub-ambattur", travelTimeMin: 25, distanceKm: 7, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+  { id: "koyambedu_guindy", from: "koyambedu", to: "hub-guindy", travelTimeMin: 35, distanceKm: 9, ambientOffsetC: 1.0, floodProne: false, congestionProne: true },
+  { id: "koyambedu_perambur", from: "koyambedu", to: "hub-perambur", travelTimeMin: 30, distanceKm: 8, ambientOffsetC: 1.0, floodProne: false, congestionProne: true },
+  { id: "kasimedu_perambur", from: "kasimedu", to: "hub-perambur", travelTimeMin: 30, distanceKm: 9, ambientOffsetC: -0.5, floodProne: false, congestionProne: false },
+  { id: "aavin_perambur", from: "aavin-madhavaram", to: "hub-perambur", travelTimeMin: 18, distanceKm: 5, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+  { id: "aavin_ambattur", from: "aavin-madhavaram", to: "hub-ambattur", travelTimeMin: 35, distanceKm: 11, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
 
   // ── Direct source → retail (fast, unrefrigerated-corridor alternates) ─────
-  { id: "koyambedu_annanagar", from: "koyambedu", to: "anna-nagar", travelTimeMin: 15, distanceKm: 3.5, ambientOffsetC: 1.5, floodProne: false },
-  { id: "koyambedu_tnagar", from: "koyambedu", to: "t-nagar", travelTimeMin: 28, distanceKm: 6.5, ambientOffsetC: 1.5, floodProne: false },
+  { id: "koyambedu_annanagar", from: "koyambedu", to: "anna-nagar", travelTimeMin: 25, distanceKm: 3.5, ambientOffsetC: 1.5, floodProne: false, congestionProne: true },
+  { id: "koyambedu_annanagar_bypass", from: "koyambedu", to: "anna-nagar", travelTimeMin: 12, distanceKm: 6.0, ambientOffsetC: 0.0, floodProne: false, congestionProne: false },
+  { id: "koyambedu_tnagar", from: "koyambedu", to: "t-nagar", travelTimeMin: 45, distanceKm: 6.5, ambientOffsetC: 1.5, floodProne: false, congestionProne: true },
+  { id: "koyambedu_tnagar_bypass", from: "koyambedu", to: "t-nagar", travelTimeMin: 25, distanceKm: 10.5, ambientOffsetC: 0.0, floodProne: false, congestionProne: false },
   // Coastal road past the port — low-lying, closes in monsoon floods.
-  { id: "kasimedu_mylapore_coastal", from: "kasimedu", to: "mylapore", travelTimeMin: 45, distanceKm: 13, ambientOffsetC: -1.0, floodProne: true },
+  { id: "kasimedu_mylapore_coastal", from: "kasimedu", to: "mylapore", travelTimeMin: 25, distanceKm: 13, ambientOffsetC: -1.0, floodProne: true, congestionProne: false },
+  { id: "kasimedu_mylapore_city", from: "kasimedu", to: "mylapore", travelTimeMin: 45, distanceKm: 9.5, ambientOffsetC: 1.5, floodProne: false, congestionProne: true },
 
   // ── Hub → retail ──────────────────────────────────────────────────────────
-  { id: "perambur_annanagar", from: "hub-perambur", to: "anna-nagar", travelTimeMin: 20, distanceKm: 5, ambientOffsetC: 1.0, floodProne: false },
-  { id: "perambur_tnagar", from: "hub-perambur", to: "t-nagar", travelTimeMin: 40, distanceKm: 10, ambientOffsetC: 1.5, floodProne: false },
-  { id: "perambur_mylapore", from: "hub-perambur", to: "mylapore", travelTimeMin: 45, distanceKm: 12, ambientOffsetC: 0.5, floodProne: false },
-  { id: "guindy_tnagar", from: "hub-guindy", to: "t-nagar", travelTimeMin: 20, distanceKm: 5.5, ambientOffsetC: 1.0, floodProne: false },
-  { id: "guindy_mylapore", from: "hub-guindy", to: "mylapore", travelTimeMin: 30, distanceKm: 8.5, ambientOffsetC: 0.5, floodProne: false },
+  { id: "perambur_annanagar", from: "hub-perambur", to: "anna-nagar", travelTimeMin: 20, distanceKm: 5, ambientOffsetC: 1.0, floodProne: false, congestionProne: false },
+  { id: "perambur_tnagar", from: "hub-perambur", to: "t-nagar", travelTimeMin: 45, distanceKm: 10, ambientOffsetC: 1.5, floodProne: false, congestionProne: true },
+  { id: "perambur_tnagar_bypass", from: "hub-perambur", to: "t-nagar", travelTimeMin: 28, distanceKm: 14, ambientOffsetC: 0.0, floodProne: false, congestionProne: false },
+  { id: "perambur_mylapore", from: "hub-perambur", to: "mylapore", travelTimeMin: 45, distanceKm: 12, ambientOffsetC: 0.5, floodProne: false, congestionProne: true },
+  { id: "guindy_tnagar", from: "hub-guindy", to: "t-nagar", travelTimeMin: 25, distanceKm: 5.5, ambientOffsetC: 1.0, floodProne: false, congestionProne: true },
+  { id: "guindy_mylapore", from: "hub-guindy", to: "mylapore", travelTimeMin: 30, distanceKm: 8.5, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
   // Adyar main road crosses the Adyar river — closes in floods; OMR-side alternate is longer.
-  { id: "guindy_adyar_main", from: "hub-guindy", to: "adyar", travelTimeMin: 22, distanceKm: 6, ambientOffsetC: 0.0, floodProne: true },
-  { id: "guindy_adyar_omr", from: "hub-guindy", to: "adyar", travelTimeMin: 30, distanceKm: 8, ambientOffsetC: 0.5, floodProne: false },
+  { id: "guindy_adyar_main", from: "hub-guindy", to: "adyar", travelTimeMin: 25, distanceKm: 6, ambientOffsetC: -1.0, floodProne: true, congestionProne: true },
+  { id: "guindy_adyar_omr", from: "hub-guindy", to: "adyar", travelTimeMin: 15, distanceKm: 8, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
   // Velachery main road floods notoriously; Taramani loop is longer and hotter.
-  { id: "guindy_velachery_main", from: "hub-guindy", to: "velachery", travelTimeMin: 16, distanceKm: 4.5, ambientOffsetC: 1.0, floodProne: true },
-  { id: "guindy_velachery_taramani", from: "hub-guindy", to: "velachery", travelTimeMin: 28, distanceKm: 7, ambientOffsetC: 1.5, floodProne: false },
-  { id: "ambattur_annanagar", from: "hub-ambattur", to: "anna-nagar", travelTimeMin: 25, distanceKm: 7, ambientOffsetC: 1.0, floodProne: false },
+  { id: "guindy_velachery_main", from: "hub-guindy", to: "velachery", travelTimeMin: 28, distanceKm: 4.5, ambientOffsetC: 1.0, floodProne: true, congestionProne: true },
+  { id: "guindy_velachery_taramani", from: "hub-guindy", to: "velachery", travelTimeMin: 16, distanceKm: 7, ambientOffsetC: -0.5, floodProne: false, congestionProne: false },
+  { id: "ambattur_annanagar", from: "hub-ambattur", to: "anna-nagar", travelTimeMin: 25, distanceKm: 7, ambientOffsetC: 1.0, floodProne: false, congestionProne: false },
 
   // ── Inter-hub transfer ────────────────────────────────────────────────────
-  { id: "perambur_guindy", from: "hub-perambur", to: "hub-guindy", travelTimeMin: 50, distanceKm: 14, ambientOffsetC: 1.0, floodProne: false },
-  { id: "ambattur_perambur", from: "hub-ambattur", to: "hub-perambur", travelTimeMin: 30, distanceKm: 9, ambientOffsetC: 0.5, floodProne: false },
+  { id: "perambur_guindy", from: "hub-perambur", to: "hub-guindy", travelTimeMin: 50, distanceKm: 14, ambientOffsetC: 1.0, floodProne: false, congestionProne: true },
+  { id: "ambattur_perambur", from: "hub-ambattur", to: "hub-perambur", travelTimeMin: 30, distanceKm: 9, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+
+  // ── New Expansion Edges ───────────────────────────────────────────────────
+  { id: "ennore_perambur", from: "ennore-port", to: "hub-perambur", travelTimeMin: 45, distanceKm: 15, ambientOffsetC: 0.5, floodProne: false, congestionProne: true },
+  { id: "ennore_ambattur", from: "ennore-port", to: "hub-ambattur", travelTimeMin: 55, distanceKm: 22, ambientOffsetC: 0.0, floodProne: false, congestionProne: false },
+  
+  { id: "guindy_tambaram_gst", from: "hub-guindy", to: "tambaram", travelTimeMin: 40, distanceKm: 12, ambientOffsetC: 1.0, floodProne: true, congestionProne: true },
+  { id: "guindy_tambaram_bypass", from: "hub-guindy", to: "tambaram", travelTimeMin: 25, distanceKm: 16, ambientOffsetC: 0.0, floodProne: false, congestionProne: false },
+  
+  { id: "guindy_sholinganallur", from: "hub-guindy", to: "sholinganallur", travelTimeMin: 35, distanceKm: 14, ambientOffsetC: 1.5, floodProne: false, congestionProne: true },
+  { id: "adyar_sholinganallur", from: "adyar", to: "sholinganallur", travelTimeMin: 25, distanceKm: 12, ambientOffsetC: -0.5, floodProne: false, congestionProne: false },
+  
+  { id: "ambattur_porur", from: "hub-ambattur", to: "porur", travelTimeMin: 20, distanceKm: 8, ambientOffsetC: 0.5, floodProne: false, congestionProne: true },
+  { id: "koyambedu_porur", from: "koyambedu", to: "porur", travelTimeMin: 15, distanceKm: 6.5, ambientOffsetC: 1.0, floodProne: false, congestionProne: false },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -381,14 +509,18 @@ export function reachableFrom(
  * closedEdgeIds / excludeFloodProne let the Phase 5 monsoon scenario force a
  * reroute by removing roads — the dual main/alternate edges guarantee a path
  * still exists (asserted in chennai.test.ts).
+ *
+ * When hourOfDay is provided, Dijkstra uses currentTravelTimeMin (dynamic
+ * traffic-aware) instead of static travelTimeMin.
  */
 export function planRoute(
   fromId: string,
   toId: string,
-  opts: { closedEdgeIds?: string[]; excludeFloodProne?: boolean } = {}
+  opts: { closedEdgeIds?: string[]; excludeFloodProne?: boolean; hourOfDay?: number } = {}
 ): string[] | null {
   if (fromId === toId) return [];
   const closed = new Set(opts.closedEdgeIds ?? []);
+  const useDynamic = opts.hourOfDay != null;
   const dist = new Map<string, number>([[fromId, 0]]);
   const prevEdge = new Map<string, CityEdge>();
   const visited = new Set<string>();
@@ -403,7 +535,10 @@ export function planRoute(
     for (const e of edgesFrom(id)) {
       if (closed.has(e.id)) continue;
       if (opts.excludeFloodProne && e.floodProne) continue;
-      const nd = d + e.travelTimeMin;
+      const cost = useDynamic
+        ? currentTravelTimeMin(e, opts.hourOfDay!)
+        : e.travelTimeMin;
+      const nd = d + cost;
       if (nd < (dist.get(e.to) ?? Infinity)) {
         dist.set(e.to, nd);
         prevEdge.set(e.to, e);
@@ -432,4 +567,151 @@ export function routeDistanceKm(route: string[]): number {
 /** Total nominal travel time (hours) of a route. */
 export function routeTravelHours(route: string[]): number {
   return route.reduce((sum, id) => sum + getEdge(id).travelTimeMin / 60, 0);
+}
+
+/** Total dynamic travel time (hours) of a route at a given hour of day. */
+export function routeTravelHoursDynamic(route: string[], hourOfDay: number): number {
+  return route.reduce(
+    (sum, id) => sum + currentTravelTimeMin(getEdge(id), hourOfDay) / 60,
+    0
+  );
+}
+
+/** Average ambient offset along a route, weighted by distance. */
+export function routeAvgAmbientOffsetC(route: string[]): number {
+  if (route.length === 0) return 0;
+  let totalDist = 0;
+  let weightedSum = 0;
+  for (const id of route) {
+    const e = getEdge(id);
+    totalDist += e.distanceKm;
+    weightedSum += e.ambientOffsetC * e.distanceKm;
+  }
+  return totalDist > 0 ? weightedSum / totalDist : 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Multi-Route Selection (Phase 9)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type RouteStrategy = "fastest" | "shortest" | "coolest";
+
+export interface RouteOption {
+  id: RouteStrategy;
+  label: string;
+  edgeIds: string[];
+  /** Estimated travel time in hours (accounting for traffic at dispatch hour). */
+  estimatedHours: number;
+  /** Total road distance, km. */
+  distanceKm: number;
+  /** Weighted average ambient offset along the route (lower = cooler). */
+  avgAmbientOffsetC: number;
+}
+
+/**
+ * Generic Dijkstra with a caller-supplied edge weight function.
+ * Returns edge IDs of the shortest path, or null if unreachable.
+ */
+function dijkstraBy(
+  fromId: string,
+  toId: string,
+  weight: (e: CityEdge) => number,
+  closed: Set<string>,
+  excludeFlood: boolean
+): string[] | null {
+  if (fromId === toId) return [];
+  const dist = new Map<string, number>([[fromId, 0]]);
+  const prevEdge = new Map<string, CityEdge>();
+  const visited = new Set<string>();
+  const frontier: { id: string; d: number }[] = [{ id: fromId, d: 0 }];
+  while (frontier.length > 0) {
+    frontier.sort((a, b) => a.d - b.d);
+    const { id, d } = frontier.shift()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    if (id === toId) break;
+    for (const e of edgesFrom(id)) {
+      if (closed.has(e.id)) continue;
+      if (excludeFlood && e.floodProne) continue;
+      const nd = d + weight(e);
+      if (nd < (dist.get(e.to) ?? Infinity)) {
+        dist.set(e.to, nd);
+        prevEdge.set(e.to, e);
+        frontier.push({ id: e.to, d: nd });
+      }
+    }
+  }
+  if (!prevEdge.has(toId)) return null;
+  const route: string[] = [];
+  let cur = toId;
+  while (cur !== fromId) {
+    const e = prevEdge.get(cur);
+    if (!e) return null;
+    route.unshift(e.id);
+    cur = e.from;
+  }
+  return route;
+}
+
+/**
+ * Returns up to 3 distinct route options from source to destination.
+ * - Fastest: Dijkstra weighted by currentTravelTimeMin (avoids traffic)
+ * - Shortest: Dijkstra weighted by distanceKm (saves fuel, risks traffic)
+ * - Coolest: Dijkstra weighted by ambientOffsetC (favours coastal/shaded roads)
+ *
+ * Deduplicates: if two algorithms produce the same edge sequence, only one is kept.
+ */
+export function planRouteOptions(
+  fromId: string,
+  toId: string,
+  opts: { hourOfDay: number; closedEdgeIds?: string[]; excludeFloodProne?: boolean }
+): RouteOption[] {
+  const closed = new Set(opts.closedEdgeIds ?? []);
+  const exFlood = opts.excludeFloodProne ?? false;
+  const hour = opts.hourOfDay;
+
+  const candidates: { id: RouteStrategy; label: string; edgeIds: string[] | null }[] = [
+    {
+      id: "fastest",
+      label: "⚡ Fastest",
+      edgeIds: dijkstraBy(fromId, toId, (e) => currentTravelTimeMin(e, hour), closed, exFlood),
+    },
+    {
+      id: "shortest",
+      label: "📏 Shortest",
+      edgeIds: dijkstraBy(fromId, toId, (e) => e.distanceKm, closed, exFlood),
+    },
+    {
+      id: "coolest",
+      label: "❄️ Coolest",
+      // Weight by ambient offset shifted so lower offsets are cheaper.
+      // We add 3 to ensure all weights are positive (min offset is -1).
+      edgeIds: dijkstraBy(
+        fromId,
+        toId,
+        (e) => (e.ambientOffsetC + 3) * e.distanceKm,
+        closed,
+        exFlood
+      ),
+    },
+  ];
+
+  // Deduplicate by edge sequence
+  const seen = new Set<string>();
+  const results: RouteOption[] = [];
+  for (const c of candidates) {
+    if (!c.edgeIds || c.edgeIds.length === 0) continue;
+    const key = c.edgeIds.join(",");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push({
+      id: c.id,
+      label: c.label,
+      edgeIds: c.edgeIds,
+      estimatedHours: routeTravelHoursDynamic(c.edgeIds, hour),
+      distanceKm: routeDistanceKm(c.edgeIds),
+      avgAmbientOffsetC: routeAvgAmbientOffsetC(c.edgeIds),
+    });
+  }
+  return results;
 }

@@ -22,6 +22,10 @@ const NODES = {
   adyar: [80.257, 13.006],
   "anna-nagar": [80.21, 13.085],
   velachery: [80.221, 12.979],
+  tambaram: [80.114, 12.924],
+  sholinganallur: [80.227, 12.901],
+  porur: [80.158, 13.036],
+  "ennore-port": [80.323, 13.235],
 };
 
 const EDGES = [
@@ -31,11 +35,17 @@ const EDGES = [
   ["kasimedu_perambur", "kasimedu", "hub-perambur"],
   ["aavin_perambur", "aavin-madhavaram", "hub-perambur"],
   ["aavin_ambattur", "aavin-madhavaram", "hub-ambattur"],
+  
   ["koyambedu_annanagar", "koyambedu", "anna-nagar"],
+  ["koyambedu_annanagar_bypass", "koyambedu", "anna-nagar"],
   ["koyambedu_tnagar", "koyambedu", "t-nagar"],
+  ["koyambedu_tnagar_bypass", "koyambedu", "t-nagar"],
   ["kasimedu_mylapore_coastal", "kasimedu", "mylapore"],
+  ["kasimedu_mylapore_city", "kasimedu", "mylapore"],
+  
   ["perambur_annanagar", "hub-perambur", "anna-nagar"],
   ["perambur_tnagar", "hub-perambur", "t-nagar"],
+  ["perambur_tnagar_bypass", "hub-perambur", "t-nagar"],
   ["perambur_mylapore", "hub-perambur", "mylapore"],
   ["guindy_tnagar", "hub-guindy", "t-nagar"],
   ["guindy_mylapore", "hub-guindy", "mylapore"],
@@ -46,10 +56,27 @@ const EDGES = [
   ["ambattur_annanagar", "hub-ambattur", "anna-nagar"],
   ["perambur_guindy", "hub-perambur", "hub-guindy"],
   ["ambattur_perambur", "hub-ambattur", "hub-perambur"],
+  
+  ["ennore_perambur", "ennore-port", "hub-perambur"],
+  ["ennore_ambattur", "ennore-port", "hub-ambattur"],
+  ["guindy_tambaram_gst", "hub-guindy", "tambaram"],
+  ["guindy_tambaram_bypass", "hub-guindy", "tambaram"],
+  ["guindy_sholinganallur", "hub-guindy", "sholinganallur"],
+  ["adyar_sholinganallur", "adyar", "sholinganallur"],
+  ["ambattur_porur", "hub-ambattur", "porur"],
+  ["koyambedu_porur", "koyambedu", "porur"],
 ];
 
 // Edges that should take a visibly different road than their sibling "main".
-const ALTERNATE_IDS = new Set(["guindy_adyar_omr", "guindy_velachery_taramani"]);
+const ALTERNATE_IDS = new Set([
+  "guindy_adyar_omr",
+  "guindy_velachery_taramani",
+  "koyambedu_annanagar_bypass",
+  "koyambedu_tnagar_bypass",
+  "kasimedu_mylapore_city",
+  "perambur_tnagar_bypass",
+  "guindy_tambaram_bypass"
+]);
 
 const round5 = (n) => Math.round(n * 1e5) / 1e5;
 
