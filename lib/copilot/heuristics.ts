@@ -197,8 +197,9 @@ export function buildCopilotContext(state: SimulationState): string {
           ? `reefer @ ${s.transportSetpointC.toFixed(0)}°C`
           : "ambient truck";
       const verdict = predLife < remaining ? " — WILL SPOIL before arrival" : "";
+      const shortId = s.id.replace(/^SHP-/, "S");
       lines.push(
-        `- ${profile.label} ${s.id}: quality ${s.batch.quality.toFixed(
+        `- ${profile.label} ${shortId}: quality ${s.batch.quality.toFixed(
           0
         )}%, cargo ${s.lastTempC.toFixed(1)}°C, ${transport}, ~${remaining.toFixed(
           1

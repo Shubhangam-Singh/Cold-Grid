@@ -18,7 +18,7 @@ describe("coldgridStore", () => {
 
   it("loads the full Chennai graph and an empty simulation", () => {
     const s = useColdgridStore.getState();
-    expect(s.nodes.length).toBe(11);
+    expect(s.nodes.length).toBe(15); // 11 original + 4 expansion nodes (Ennore, Tambaram, Sholinganallur, Porur)
     expect(s.edges.length).toBeGreaterThan(0);
     expect(s.sim.shipments).toHaveLength(0);
   });

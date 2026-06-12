@@ -82,14 +82,14 @@ export const SCENARIOS: Scenario[] = [
     scenarioOffsetC: 3,
     closedEdgeIds: [],
     startHourOfDay: 13,
-    energyBudgetKwh: 4.5,
+    energyBudgetKwh: 3.5,
     requiredDeliveries: [
       { id: "d1", label: "Fish to Mylapore", produce: "fish", fromId: "kasimedu", toId: "mylapore", valueWeight: 2, deadlineHours: 4 },
       { id: "d2", label: "Paneer to Adyar", produce: "paneer", fromId: "aavin-madhavaram", toId: "adyar", valueWeight: 2, deadlineHours: 5 },
       { id: "d3", label: "Banana to Anna Nagar", produce: "banana", fromId: "koyambedu", toId: "anna-nagar", valueWeight: 1, deadlineHours: 5 },
       { id: "d4", label: "Apple to T. Nagar", produce: "apple", fromId: "koyambedu", toId: "t-nagar", valueWeight: 1, deadlineHours: 6 },
     ],
-    targets: { twoStar: 60, threeStar: 82 },
+    targets: { twoStar: 55, threeStar: 75 },
     hints: [
       "Your energy budget can't cool every truck — check the budget gauge.",
       "Fish and paneer spoil fast; apples and bananas tolerate an ambient run. Spend the generator where it matters.",

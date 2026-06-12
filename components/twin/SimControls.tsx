@@ -50,7 +50,6 @@ export default function SimControls() {
   const scenarioOffsetC = useColdgridStore((s) => s.sim.scenarioOffsetC);
   const togglePlay = useColdgridStore((s) => s.togglePlay);
   const setSpeed = useColdgridStore((s) => s.setSpeed);
-  const dispatch = useColdgridStore((s) => s.dispatch);
   const setPendingDispatch = useColdgridStore((s) => s.setPendingDispatch);
   const clearDelivered = useColdgridStore((s) => s.clearDelivered);
   const resetSim = useColdgridStore((s) => s.resetSim);

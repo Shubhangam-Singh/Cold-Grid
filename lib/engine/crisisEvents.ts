@@ -7,7 +7,7 @@
  */
 
 import { mulberry32 } from "./rng";
-import { edgesFrom, getEdge, getNode, planRoute, routeTravelHours, type CityEdge } from "../city/chennai";
+import { getEdge, getNode, planRoute } from "../city/chennai";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types

@@ -13,18 +13,16 @@ import type { Batch, ProduceId, ProduceProfile } from "./types";
 import { createBatch, isSpoiled, stepBatch } from "./spoilage";
 import { getProduce } from "./produce";
 import {
-  currentTravelTimeMin,
   edgeAmbientC,
   edgePath,
   getEdge,
   getNode,
   pathPositionAndAngle,
   planRoute,
-  pointAlongPath,
   trafficMultiplier,
 } from "../city/chennai";
 import { mulberry32 } from "./rng";
-import { type DriverProfile, getDriver, DEFAULT_DRIVER_ID } from "./drivers";
+import { getDriver, DEFAULT_DRIVER_ID } from "./drivers";
 import {
   type CrisisEvent,
   shouldCrisisFire,
@@ -224,6 +222,20 @@ export function advanceShipment(s: Shipment, ctx: StepContext): Shipment {
 
   const posAndAngle = edgePositionAndAngle(s.route[legIndex], legProgress);
 
+  // Smooth the heading angle using shortest-arc interpolation.
+  // This prevents DeckGL from animating "the long way round" (e.g. 350°→10°
+  // going backward through 340° instead of forward through 20°).
+  // We also cap the per-tick rotation at 45° so sharp road bends don't cause
+  // an instantaneous snap.
+  const prevAngle = s.angle ?? posAndAngle.angle;
+  const rawAngle = posAndAngle.angle;
+  // Normalise delta to (-180, 180]
+  let delta = ((rawAngle - prevAngle + 540) % 360) - 180;
+  // Clamp max rotation per tick to 45° — larger than any real road bend per step
+  const MAX_DEG_PER_TICK = 45;
+  delta = Math.max(-MAX_DEG_PER_TICK, Math.min(MAX_DEG_PER_TICK, delta));
+  const smoothedAngle = prevAngle + delta;
+
   return {
     ...s,
     batch,
@@ -232,7 +244,7 @@ export function advanceShipment(s: Shipment, ctx: StepContext): Shipment {
     status,
     energyKwh,
     position: posAndAngle.position,
-    angle: posAndAngle.angle,
+    angle: smoothedAngle,
     lastTempC: sensors.T_C,
     lastRH: sensors.RH,
     lastVOC: sensors.VOC,

@@ -201,28 +201,58 @@ export function pathPositionAndAngle(
 ): { position: [number, number]; angle: number } {
   if (path.length === 0) return { position: [0, 0], angle: 0 };
   if (path.length === 1) return { position: path[0], angle: 0 };
-  
+
   const position = pointAlongPath(path, t);
-  
-  // To avoid abrupt jittering on micro-segments, we compute the angle
-  // using a small look-ahead and look-behind window.
-  // 0.02 is 2% of the path length, which smooths out sharp corners.
-  const t1 = Math.max(0, t - 0.02);
-  const t2 = Math.min(1, t + 0.02);
-  const p1 = pointAlongPath(path, t1);
-  const p2 = pointAlongPath(path, t2);
-  
-  // If the path is extremely short and p1 === p2, fallback to start/end
-  const dx = p2[0] - p1[0];
-  const dy = p2[1] - p1[1];
-  
-  if (dx === 0 && dy === 0) {
-    const start = path[0];
-    const end = path[path.length - 1];
-    return { position, angle: Math.atan2(end[0] - start[0], end[1] - start[1]) * (180 / Math.PI) };
+
+  // Build cumulative arc-length table (in km) for the polyline.
+  const segLen: number[] = [];
+  let total = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const d = haversineKm(path[i], path[i + 1]);
+    segLen.push(d);
+    total += d;
+  }
+  if (total === 0) return { position, angle: 0 };
+
+  const currentDist = Math.max(0, Math.min(1, t)) * total;
+
+  // Use a fixed ±80 m (0.08 km) window in arc-length space.
+  // This is robust regardless of how many points the OSRM path has.
+  const WINDOW_KM = 0.08;
+  const d1 = Math.max(0, currentDist - WINDOW_KM);
+  const d2 = Math.min(total, currentDist + WINDOW_KM);
+
+  // Walk the polyline to find the two sample points.
+  function sampleAtDist(target: number): [number, number] {
+    let acc = 0;
+    for (let i = 0; i < segLen.length; i++) {
+      if (acc + segLen[i] >= target || i === segLen.length - 1) {
+        const f = segLen[i] === 0 ? 0 : Math.min(1, (target - acc) / segLen[i]);
+        const a = path[i];
+        const b = path[i + 1];
+        return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+      }
+      acc += segLen[i];
+    }
+    return path[path.length - 1];
   }
 
-  const angle = Math.atan2(dx, dy) * (180 / Math.PI);
+  const p1 = sampleAtDist(d1);
+  const p2 = sampleAtDist(d2);
+
+  const dLon = p2[0] - p1[0];
+  const dLat = p2[1] - p1[1];
+
+  if (dLon === 0 && dLat === 0) {
+    // Absolute fallback: use first-to-last bearing.
+    const s = path[0];
+    const e = path[path.length - 1];
+    return { position, angle: Math.atan2(e[0] - s[0], e[1] - s[1]) * (180 / Math.PI) };
+  }
+
+  // atan2(dLon, dLat) maps geographic bearing to deck.gl's angle convention
+  // (0 = North/up, 90 = East/right).
+  const angle = Math.atan2(dLon, dLat) * (180 / Math.PI);
   return { position, angle };
 }
 
@@ -287,8 +317,8 @@ export const CHENNAI_NODES: CityNode[] = [
     type: "source",
     coordinates: [80.323, 13.235],
     ambientOffsetC: 1.0, // hot container yard
-    refrigeration: { setpointC: -18 }, // deep freeze imports
-    handles: ["fish", "apple"], // frozen fish exports, imported apples
+    refrigeration: { setpointC: 4 }, // chilled cold-storage (spec §5 setpoints: 0–10 °C for hubs/sources)
+    handles: ["fish", "apple"], // imported fish and apples
     description: "Major port for imported temperature-controlled sea freight.",
   },
 
@@ -422,7 +452,7 @@ export const CHENNAI_EDGES: CityEdge[] = [
   { id: "koyambedu_tnagar_bypass", from: "koyambedu", to: "t-nagar", travelTimeMin: 25, distanceKm: 10.5, ambientOffsetC: 0.0, floodProne: false, congestionProne: false },
   // Coastal road past the port — low-lying, closes in monsoon floods.
   { id: "kasimedu_mylapore_coastal", from: "kasimedu", to: "mylapore", travelTimeMin: 25, distanceKm: 13, ambientOffsetC: -1.0, floodProne: true, congestionProne: false },
-  { id: "kasimedu_mylapore_city", from: "kasimedu", to: "mylapore", travelTimeMin: 45, distanceKm: 9.5, ambientOffsetC: 1.5, floodProne: false, congestionProne: true },
+  { id: "kasimedu_mylapore_city", from: "kasimedu", to: "mylapore", travelTimeMin: 45, distanceKm: 11.5, ambientOffsetC: 1.5, floodProne: false, congestionProne: true },
 
   // ── Hub → retail ──────────────────────────────────────────────────────────
   { id: "perambur_annanagar", from: "hub-perambur", to: "anna-nagar", travelTimeMin: 20, distanceKm: 5, ambientOffsetC: 1.0, floodProne: false, congestionProne: false },
@@ -435,8 +465,9 @@ export const CHENNAI_EDGES: CityEdge[] = [
   { id: "guindy_adyar_main", from: "hub-guindy", to: "adyar", travelTimeMin: 25, distanceKm: 6, ambientOffsetC: -1.0, floodProne: true, congestionProne: true },
   { id: "guindy_adyar_omr", from: "hub-guindy", to: "adyar", travelTimeMin: 15, distanceKm: 8, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
   // Velachery main road floods notoriously; Taramani loop is longer and hotter.
-  { id: "guindy_velachery_main", from: "hub-guindy", to: "velachery", travelTimeMin: 28, distanceKm: 4.5, ambientOffsetC: 1.0, floodProne: true, congestionProne: true },
-  { id: "guindy_velachery_taramani", from: "hub-guindy", to: "velachery", travelTimeMin: 16, distanceKm: 7, ambientOffsetC: -0.5, floodProne: false, congestionProne: false },
+  // Velachery main (fast, direct) floods notoriously. Taramani loop is the slower wet-season alternate.
+  { id: "guindy_velachery_main", from: "hub-guindy", to: "velachery", travelTimeMin: 18, distanceKm: 4.5, ambientOffsetC: 1.0, floodProne: true, congestionProne: true },
+  { id: "guindy_velachery_taramani", from: "hub-guindy", to: "velachery", travelTimeMin: 32, distanceKm: 7, ambientOffsetC: -0.5, floodProne: false, congestionProne: false },
   { id: "ambattur_annanagar", from: "hub-ambattur", to: "anna-nagar", travelTimeMin: 25, distanceKm: 7, ambientOffsetC: 1.0, floodProne: false, congestionProne: false },
 
   // ── Inter-hub transfer ────────────────────────────────────────────────────
@@ -444,11 +475,11 @@ export const CHENNAI_EDGES: CityEdge[] = [
   { id: "ambattur_perambur", from: "hub-ambattur", to: "hub-perambur", travelTimeMin: 30, distanceKm: 9, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
 
   // ── New Expansion Edges ───────────────────────────────────────────────────
-  { id: "ennore_perambur", from: "ennore-port", to: "hub-perambur", travelTimeMin: 45, distanceKm: 15, ambientOffsetC: 0.5, floodProne: false, congestionProne: true },
-  { id: "ennore_ambattur", from: "ennore-port", to: "hub-ambattur", travelTimeMin: 55, distanceKm: 22, ambientOffsetC: 0.0, floodProne: false, congestionProne: false },
+  { id: "ennore_perambur", from: "ennore-port", to: "hub-perambur", travelTimeMin: 45, distanceKm: 17, ambientOffsetC: 0.5, floodProne: false, congestionProne: true },
+  { id: "ennore_ambattur", from: "ennore-port", to: "hub-ambattur", travelTimeMin: 55, distanceKm: 24, ambientOffsetC: 0.0, floodProne: false, congestionProne: false },
   
-  { id: "guindy_tambaram_gst", from: "hub-guindy", to: "tambaram", travelTimeMin: 40, distanceKm: 12, ambientOffsetC: 1.0, floodProne: true, congestionProne: true },
-  { id: "guindy_tambaram_bypass", from: "hub-guindy", to: "tambaram", travelTimeMin: 25, distanceKm: 16, ambientOffsetC: 0.0, floodProne: false, congestionProne: false },
+  { id: "guindy_tambaram_gst", from: "hub-guindy", to: "tambaram", travelTimeMin: 40, distanceKm: 15, ambientOffsetC: 1.0, floodProne: true, congestionProne: true },
+  { id: "guindy_tambaram_bypass", from: "hub-guindy", to: "tambaram", travelTimeMin: 30, distanceKm: 19, ambientOffsetC: 0.0, floodProne: false, congestionProne: false },
   
   { id: "guindy_sholinganallur", from: "hub-guindy", to: "sholinganallur", travelTimeMin: 35, distanceKm: 14, ambientOffsetC: 1.5, floodProne: false, congestionProne: true },
   { id: "adyar_sholinganallur", from: "adyar", to: "sholinganallur", travelTimeMin: 25, distanceKm: 12, ambientOffsetC: -0.5, floodProne: false, congestionProne: false },

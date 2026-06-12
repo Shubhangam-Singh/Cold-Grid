@@ -400,7 +400,7 @@ export default function DeckMap() {
         height: 128,
         anchorY: 64,
       }),
-      getSize: 45, // Slightly smaller
+      getSize: 45,
       getAngle: (s) => s.angle || 0,
       sizeUnits: "pixels",
       sizeScale: 1,
@@ -411,8 +411,8 @@ export default function DeckMap() {
         setSelectedShipment(info.object ? info.object.id : null),
       updateTriggers: { getIcon: [inTransit], getAngle: [inTransit] },
       transitions: {
+        // Only interpolate position — angle is smoothed in the engine.
         getPosition: { duration: transitionDuration, easing: (t: number) => t },
-        getAngle: { duration: transitionDuration, easing: (t: number) => t },
       },
     });
 

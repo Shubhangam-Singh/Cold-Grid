@@ -8,12 +8,8 @@
 
 import { useMemo, useState } from "react";
 import { useColdgridStore } from "@/store/coldgridStore";
-import {
-  planRouteOptions,
-  routeTravelHoursDynamic,
-  type RouteOption,
-} from "@/lib/city/chennai";
-import { DRIVERS, type DriverProfile, DEFAULT_DRIVER_ID } from "@/lib/engine/drivers";
+import { planRouteOptions } from "@/lib/city/chennai";
+import { DRIVERS, DEFAULT_DRIVER_ID } from "@/lib/engine/drivers";
 import { getProduce } from "@/lib/engine/produce";
 import { getNode } from "@/lib/city/chennai";
 
