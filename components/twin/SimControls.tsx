@@ -94,10 +94,11 @@ export default function SimControls() {
   };
 
   return (
-    <div className="absolute left-6 top-6 z-20 max-h-[calc(100vh-22rem)] w-72 overflow-y-auto rounded-xl glass-panel p-4 animate-slide-up">
-      <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
-        Operations
-      </div>
+    <div className="pointer-events-auto flex flex-col min-h-0 w-72 rounded-xl glass-panel p-4 animate-slide-up flex-shrink">
+      <div className="flex-1 overflow-y-auto min-h-0 pr-1 -mr-1">
+        <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
+          Operations
+        </div>
 
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
@@ -253,6 +254,8 @@ export default function SimControls() {
           <button onClick={resetSim} className="text-xs text-slate-400 transition-colors hover:text-white hover:text-glow">
             ↺ Reset
           </button>
+        </div>
+      </div>
         </div>
       </div>
     </div>

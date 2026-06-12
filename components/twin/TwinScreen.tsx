@@ -36,7 +36,11 @@ export default function TwinScreen() {
     <div className="relative h-full w-full overflow-hidden">
       <DeckMap />
       <SimulationClock />
-      <SimControls />
+      <div className="absolute left-6 top-6 bottom-6 z-20 flex flex-col justify-between gap-4 pointer-events-none w-72">
+        <SimControls />
+        <MapLegend />
+      </div>
+
       <div className="absolute right-6 top-6 z-10 flex flex-col gap-4 pointer-events-none">
         <div className="pointer-events-auto">
           <CityClock />
@@ -48,7 +52,7 @@ export default function TwinScreen() {
           <ShipmentPanel />
         </div>
       </div>
-      <MapLegend />
+
       <CopilotPanel />
       <DemoMode />
       <ShipmentDecayModal />

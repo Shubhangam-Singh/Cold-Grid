@@ -19,7 +19,7 @@ export default function MapLegend() {
   const toggleHeatmap = useColdgridStore((s) => s.toggleHeatmap);
 
   return (
-    <div className="pointer-events-none absolute bottom-6 left-6 z-10 w-64 rounded-xl glass-panel p-4 animate-slide-up">
+    <div className="pointer-events-none w-72 rounded-xl glass-panel p-4 animate-slide-up flex-shrink-0">
       <div className="mb-3 flex items-center justify-between border-b border-white/5 pb-2">
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
           Legend
