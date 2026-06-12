@@ -16,7 +16,7 @@ import ShipmentDecayModal from "./ShipmentDecayModal";
 import DemoMode from "./DemoMode";
 import CopilotPanel from "@/components/learning/CopilotPanel";
 import RouteSelectionModal from "./RouteSelectionModal";
-import CrisisAlert from "./CrisisAlert";
+import DecisionDialog from "@/components/academy/DecisionDialog";
 import WeatherWidget from "./WeatherWidget";
 import TrackingCard from "./TrackingCard";
 
@@ -52,7 +52,7 @@ export default function TwinScreen() {
       <CopilotPanel />
       <DemoMode />
       <ShipmentDecayModal />
-      <CrisisAlert />
+      <DecisionDialog />
       <RouteSelectionModal />
       <TrackingCard />
     </div>

@@ -9,6 +9,20 @@
 
 import type { ProduceId } from "../engine/types";
 import type { RouteStrategy } from "../city/chennai";
+import type { CrisisType } from "../engine/crisisEvents";
+
+/**
+ * A crisis event that is forced to fire at a specific simulation time.
+ * Used to guarantee key learning moments (e.g. Heatwave forces a reefer
+ * breakdown at t=15min so the player must handle it).
+ */
+export interface ForcedCrisis {
+  /** Simulation clock hours at which to fire. */
+  atClockHours: number;
+  /** Index into requiredDeliveries (0-based). */
+  deliveryIndex: number;
+  type: CrisisType;
+}
 
 export interface RequiredDelivery {
   id: string;
@@ -51,6 +65,12 @@ export interface Scenario {
   hints: string[];
   /** Concepts this scenario teaches (shown in debrief / tied to assessment in P6). */
   conceptTags: string[];
+
+  // ── Crisis control ─────────────────────────────────────────────────────
+  /** Whether mid-transit crises can fire. Defaults to true. False = Tutorial mode. */
+  crisisEnabled?: boolean;
+  /** Crises that are forced to fire at a specific simulation time. */
+  forcedCrises?: ForcedCrisis[];
 }
 
 export interface DeliveryDecision {

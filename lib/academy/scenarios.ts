@@ -40,6 +40,7 @@ export const SCENARIOS: Scenario[] = [
       "A reefer near 2–4 °C keeps it fresh, but watch the energy it draws.",
     ],
     conceptTags: ["cold-chain", "arrhenius-q10"],
+    crisisEnabled: false,  // Tutorial — no crises, focus on learning the UI
   },
   {
     id: "heatwave",
@@ -67,6 +68,11 @@ export const SCENARIOS: Scenario[] = [
       "Very cold setpoints save food but spend energy fast — don't over-cool beyond what the cargo needs.",
     ],
     conceptTags: ["arrhenius-q10", "food-mile-co2", "cold-chain"],
+    crisisEnabled: true,
+    forcedCrises: [
+      // At t=15 sim-min (0.25h), force a reefer breakdown on the first milk tanker
+      { atClockHours: 0.25, deliveryIndex: 0, type: "reefer_breakdown" },
+    ],
   },
   {
     id: "grid-outage",
@@ -95,6 +101,7 @@ export const SCENARIOS: Scenario[] = [
       "Fish and paneer spoil fast; apples and bananas tolerate an ambient run. Spend the generator where it matters.",
     ],
     conceptTags: ["cold-chain", "equity-waste", "thermal-inertia"],
+    crisisEnabled: true,  // Reefer Compressor Failure probability doubled (strained generator)
   },
   {
     id: "monsoon",
@@ -122,6 +129,7 @@ export const SCENARIOS: Scenario[] = [
       "Longer transit means more time to spoil; a reefer buys back the margin the detour costs.",
     ],
     conceptTags: ["cold-chain", "thermal-inertia", "food-mile-co2"],
+    crisisEnabled: true,  // Road Accident disabled (flooding is obstacle); Tire Blowout ENABLED
   },
   {
     id: "festival-surge",
@@ -152,6 +160,11 @@ export const SCENARIOS: Scenario[] = [
       "Hardy produce (tomato, mango, banana) can ride ambient to save energy for what needs it.",
     ],
     conceptTags: ["cold-chain", "food-mile-co2", "equity-waste"],
+    crisisEnabled: true,
+    forcedCrises: [
+      // At t=20 sim-min (0.33h), force Road Accident on delivery 0 (Milk to T. Nagar)
+      { atClockHours: 0.33, deliveryIndex: 0, type: "road_accident" },
+    ],
   },
 ];
 

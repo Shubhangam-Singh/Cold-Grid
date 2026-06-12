@@ -72,6 +72,34 @@ export default function Briefing() {
             ))}
           </motion.ul>
 
+          {/* Crisis / scenario hazard badges */}
+          <motion.div variants={itemVariants} className="mt-5 flex flex-wrap gap-2">
+            {s.crisisEnabled === false ? (
+              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-[10px] font-mono text-sky-400 uppercase tracking-widest">
+                🎓 Tutorial — No crises
+              </span>
+            ) : (
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[10px] font-mono text-amber-400 uppercase tracking-widest">
+                ⚡ Mid-transit crises enabled
+              </span>
+            )}
+            {s.closedEdgeIds.length > 0 && (
+              <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-[10px] font-mono text-blue-400 uppercase tracking-widest">
+                🌊 {s.closedEdgeIds.length} road{s.closedEdgeIds.length > 1 ? "s" : ""} flooded
+              </span>
+            )}
+            {s.forcedCrises && s.forcedCrises.length > 0 && (
+              <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-[10px] font-mono text-red-400 uppercase tracking-widest">
+                🚨 {s.forcedCrises.length} scripted event{s.forcedCrises.length > 1 ? "s" : ""} incoming
+              </span>
+            )}
+            {s.energyBudgetKwh < 10 && (
+              <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-[10px] font-mono text-purple-400 uppercase tracking-widest">
+                🔋 Tight energy budget: {s.energyBudgetKwh} kWh
+              </span>
+            )}
+          </motion.div>
+
           <motion.div variants={itemVariants} className="mt-10 flex items-center justify-between border-t border-white/5 pt-6">
             <button
               onClick={backToSelect}

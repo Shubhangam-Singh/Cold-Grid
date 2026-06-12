@@ -184,6 +184,28 @@ export default function OperatorConsole() {
           )}
         </div>
 
+        {/* S3: Grid Outage — fuel allocation triage warning */}
+        {scenarioId === "grid-outage" && (
+          <div className="mt-2 rounded-lg border border-purple-500/30 bg-purple-500/8 p-2">
+            <div className="font-mono text-[9px] uppercase tracking-wider text-purple-400 mb-1">🔋 Generator Triage</div>
+            <div className="text-[10px] text-slate-400">
+              Budget: <span className="font-mono text-purple-300">{budget} kWh</span>. 
+              Refrigerate fish &amp; paneer first — they spoil fastest. Let apples &amp; bananas ride ambient.
+            </div>
+          </div>
+        )}
+
+        {/* S5: Festival Surge — CO2 budget warning */}
+        {scenarioId === "festival-surge" && (
+          <div className="mt-2 rounded-lg border border-orange-500/30 bg-orange-500/8 p-2">
+            <div className="font-mono text-[9px] uppercase tracking-wider text-orange-400 mb-1">💨 CO₂ Gauge</div>
+            <div className="text-[10px] text-slate-400">
+              Estimated CO₂: <span className="font-mono text-orange-300">{projected.co2Kg.toFixed(1)} kg</span>.
+              Aggressive reefer at low setpoints = high CO₂. Stay efficient.
+            </div>
+          </div>
+        )}
+
         <p className="mt-3 border-t border-slate-800 pt-2 text-[11px] leading-snug text-slate-500">
           Tweak the plan and watch this update. Press <span className="text-slate-300">Run the day</span> when ready.
         </p>

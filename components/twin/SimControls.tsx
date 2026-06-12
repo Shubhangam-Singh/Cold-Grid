@@ -99,16 +99,38 @@ export default function SimControls() {
         Operations
       </div>
 
-      <div className="flex items-center gap-2">
-        <button onClick={togglePlay} className={`${btn(isPlaying)} min-w-[64px]`} aria-pressed={isPlaying}>
-          {isPlaying ? "❚❚ Pause" : "▶ Play"}
-        </button>
-        <div className="flex items-center gap-1" role="group" aria-label="Speed">
-          {SPEEDS.map((sp) => (
-            <button key={sp} onClick={() => setSpeed(sp)} className={btn(speed === sp)} aria-pressed={speed === sp}>
-              {sp}×
-            </button>
-          ))}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <button onClick={togglePlay} className={`${btn(isPlaying)} min-w-[64px]`} aria-pressed={isPlaying}>
+            {isPlaying ? "❚❚ Pause" : "▶ Play"}
+          </button>
+          <div className="flex items-center gap-1" role="group" aria-label="Speed">
+            {SPEEDS.map((sp) => (
+              <button
+                key={sp}
+                onClick={() => setSpeed(sp)}
+                className={btn(speed === sp)}
+                aria-pressed={speed === sp}
+                title={`${sp}× — 1 real-sec = ${sp} sim-min`}
+              >
+                {sp}×
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Live time-ratio indicator */}
+        <div className="flex items-center gap-1.5 font-mono text-[9px] text-slate-500 pl-0.5">
+          <span className="text-twin-cyan/70">⏱</span>
+          <span>
+            1 sec{" "}
+            <span className="text-slate-400">=</span>{" "}
+            <span className="text-twin-cyan font-bold">{speed} sim-min</span>
+            {speed >= 16 && (
+              <span className="ml-1 text-amber-400/80">
+                · {speed >= 32 ? "turbo" : "fast-forward"}
+              </span>
+            )}
+          </span>
         </div>
       </div>
 

@@ -124,12 +124,15 @@ export default function DeckMap() {
   const hourOfDay = useColdgridStore((s) => s.sim.hourOfDay);
   const scenarioOffsetC = useColdgridStore((s) => s.sim.scenarioOffsetC);
   const shipments = useColdgridStore((s) => s.sim.shipments);
+  const closedEdgeIds = useColdgridStore((s) => s.sim.closedEdgeIds);
   const hoveredNodeId = useColdgridStore((s) => s.hoveredNodeId);
   const selectedNodeId = useColdgridStore((s) => s.selectedNodeId);
   const setHoveredNode = useColdgridStore((s) => s.setHoveredNode);
   const setSelectedNode = useColdgridStore((s) => s.setSelectedNode);
   const setSelectedShipment = useColdgridStore((s) => s.setSelectedShipment);
   const showHeatmap = useColdgridStore((s) => s.showHeatmap);
+  const blockedEdgeIds = useColdgridStore((s) => s.blockedEdgeIds);
+  const reroutedShipments = useColdgridStore((s) => s.reroutedShipments);
 
   // Viewport ref — updated on every view-state change so TruckMarker can project lon/lat → pixels
   const viewportRef = useRef<WebMercatorViewport | null>(null);
@@ -373,7 +376,110 @@ export default function DeckMap() {
       pickable: false,
     });
 
-    const base = [roadLayer, trafficLayer, routeTraveled, routeAhead, routeTrips, destPulseLayer, nodeLayer, labelLayer];
+    // ── Blocked edge overlay (crisis road_accident / reroute) ──────────────────
+    // Dimmed dashed red line over the blocked segment
+    const blockedEdgeData = blockedEdgeIds
+      .map((id) => { try { return getEdge(id); } catch { return null; } })
+      .filter(Boolean) as CityEdge[];
+
+    const blockedLayer = new PathLayer<CityEdge>({
+      id: "blocked-edges",
+      data: blockedEdgeData,
+      getPath: (e) => edgePath(e),
+      getColor: [239, 68, 68, 180],   // red-500 slightly transparent
+      getWidth: 5,
+      widthUnits: "pixels",
+      capRounded: true,
+      jointRounded: true,
+      opacity: 0.7,
+      pickable: false,
+    });
+
+    // ⚠️ warning text at midpoint of each blocked edge
+    const blockedWarningLayer = new TextLayer<CityEdge>({
+      id: "blocked-warning",
+      data: blockedEdgeData,
+      getPosition: (e) => {
+        const path = edgePath(e);
+        const mid = Math.floor(path.length / 2);
+        return path[mid] ?? ([80.237, 13.062] as [number, number]);
+      },
+      getText: () => "⚠️",
+      getSize: 20,
+      sizeUnits: "pixels",
+      getTextAnchor: "middle",
+      getAlignmentBaseline: "center",
+      pickable: false,
+    });
+
+    // ── Flooded road overlay (Scenario 4 closedEdgeIds) ────────────────────────
+    const floodedEdgeData = closedEdgeIds
+      .map((id) => { try { return getEdge(id); } catch { return null; } })
+      .filter(Boolean) as CityEdge[];
+
+    const floodedLayer = new PathLayer<CityEdge>({
+      id: "flooded-edges",
+      data: floodedEdgeData,
+      getPath: (e) => edgePath(e),
+      getColor: [56, 189, 248, 180],  // sky-400 (water blue)
+      getWidth: 7,
+      widthUnits: "pixels",
+      capRounded: true,
+      jointRounded: true,
+      pickable: false,
+    });
+
+    // 🌊 flood text at midpoint
+    const floodWarningLayer = new TextLayer<CityEdge>({
+      id: "flood-warning",
+      data: floodedEdgeData,
+      getPosition: (e) => {
+        const path = edgePath(e);
+        const mid = Math.floor(path.length / 2);
+        return path[mid] ?? [80.237, 13.062];
+      },
+      getText: () => "🌊",
+      getSize: 18,
+      sizeUnits: "pixels",
+      getTextAnchor: "middle",
+      getAlignmentBaseline: "center",
+      pickable: false,
+    });
+
+    // ── Rerouted route flash layer (bright animated green dashes) ─────────────
+    const reroutedPaths: { path: [number, number][]; timestamps: number[] }[] = [];
+    for (const edgeIds of Object.values(reroutedShipments)) {
+      for (const edgeId of edgeIds) {
+        try {
+          const path = edgePath(getEdge(edgeId));
+          const timestamps = path.map((_, i) => (i / Math.max(1, path.length - 1)) * 100);
+          reroutedPaths.push({ path, timestamps });
+        } catch { /* skip invalid edge */ }
+      }
+    }
+
+    const rerouteLayer = new TripsLayer<{ path: [number, number][]; timestamps: number[] }>({
+      id: "reroute-flash",
+      data: reroutedPaths,
+      getPath: (d) => d.path,
+      getTimestamps: (d) => d.timestamps,
+      getColor: [52, 211, 153],  // emerald-400
+      opacity: 0.9,
+      widthMinPixels: 4,
+      trailLength: 40,
+      currentTime: time,
+      capRounded: true,
+      jointRounded: true,
+    });
+
+    const base = [
+      roadLayer, trafficLayer,
+      floodedLayer, floodWarningLayer,
+      blockedLayer, blockedWarningLayer,
+      rerouteLayer,
+      routeTraveled, routeAhead, routeTrips,
+      destPulseLayer, nodeLayer, labelLayer,
+    ];
     return showHeatmap ? [heatLayer, ...base] : base;
     // tempOf closes over hourOfDay/scenarioOffsetC; listed below so layers rebuild.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -393,6 +499,9 @@ export default function DeckMap() {
     setSelectedShipment,
     destPulseData,
     time,
+    blockedEdgeIds,
+    closedEdgeIds,
+    reroutedShipments,
   ]);
 
   return (
@@ -402,7 +511,7 @@ export default function DeckMap() {
         controller={true}
         layers={layers}
         onViewStateChange={({ viewState }) => {
-          viewportRef.current = new WebMercatorViewport(viewState as Parameters<typeof WebMercatorViewport>[0]);
+          viewportRef.current = new WebMercatorViewport(viewState as ConstructorParameters<typeof WebMercatorViewport>[0]);
         }}
         getCursor={({ isHovering }) => (isHovering ? "pointer" : "grab")}
         getTooltip={(info: PickingInfo) => {

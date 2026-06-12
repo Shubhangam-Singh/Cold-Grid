@@ -18,7 +18,6 @@ import {
   getEdge,
   getNode,
   pathPositionAndAngle,
-  planRoute,
   planRouteOptions,
   type RouteStrategy,
   trafficMultiplier,
