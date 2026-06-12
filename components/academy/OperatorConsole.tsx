@@ -12,9 +12,11 @@ import { getScenario } from "@/lib/academy/scenarios";
 import { simulateScenario } from "@/lib/academy/run";
 import { scoreScenario } from "@/lib/academy/scoring";
 import { useAcademyStore } from "@/store/academyStore";
-import { getNode } from "@/lib/city/chennai";
+import { getNode, type RouteStrategy } from "@/lib/city/chennai";
 import { getProduce } from "@/lib/engine/produce";
+import { DRIVERS } from "@/lib/engine/drivers";
 import Stars from "./Stars";
+import ComparatorModal from "./ComparatorModal";
 
 export default function OperatorConsole() {
   const scenarioId = useAcademyStore((s) => s.scenarioId);
@@ -35,6 +37,10 @@ export default function OperatorConsole() {
 
   const budget = scenario.energyBudgetKwh;
   const energyPct = Math.min(100, (projected.energyKwh / budget) * 100);
+
+  const usedDriverIds = Object.values(decisions)
+    .filter((dec) => dec.dispatched)
+    .map((dec) => dec.driverId);
 
   return (
     <>
@@ -75,31 +81,60 @@ export default function OperatorConsole() {
                 </div>
 
                 {dec.dispatched && (
-                  <div className="mt-1.5 flex items-center gap-3">
-                    <label className="flex items-center gap-1.5 text-[11px] text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={dec.reefer}
-                        onChange={(e) => setDecision(d.id, { reefer: e.target.checked })}
-                        className="accent-sky-400"
-                      />
-                      ❄ reefer
-                    </label>
-                    {dec.reefer && (
-                      <label className="flex flex-1 items-center gap-2 text-[11px] text-slate-400">
+                  <div className="mt-2 flex flex-col gap-2">
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-[11px] text-slate-300">
                         <input
-                          type="range"
-                          min={0}
-                          max={12}
-                          step={1}
-                          value={dec.setpointC}
-                          onChange={(e) => setDecision(d.id, { setpointC: Number(e.target.value) })}
-                          className="flex-1 accent-sky-400"
-                          aria-label={`${d.label} setpoint °C`}
+                          type="checkbox"
+                          checked={dec.reefer}
+                          onChange={(e) => setDecision(d.id, { reefer: e.target.checked })}
+                          className="accent-sky-400"
                         />
-                        <span className="w-8 font-mono text-slate-200">{dec.setpointC}°</span>
+                        ❄ reefer
                       </label>
-                    )}
+                      {dec.reefer && (
+                        <label className="flex flex-1 items-center gap-2 text-[11px] text-slate-400">
+                          <input
+                            type="range"
+                            min={0}
+                            max={12}
+                            step={1}
+                            value={dec.setpointC}
+                            onChange={(e) => setDecision(d.id, { setpointC: Number(e.target.value) })}
+                            className="flex-1 accent-sky-400"
+                            aria-label={`${d.label} setpoint °C`}
+                          />
+                          <span className="w-8 font-mono text-slate-200">{dec.setpointC}°</span>
+                        </label>
+                      )}
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <select
+                        value={dec.driverId}
+                        onChange={(e) => setDecision(d.id, { driverId: e.target.value })}
+                        className="flex-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-300 outline-none focus:border-sky-500"
+                      >
+                        {DRIVERS.map((dr) => {
+                          const isUsed = usedDriverIds.includes(dr.id) && dec.driverId !== dr.id;
+                          return (
+                            <option key={dr.id} value={dr.id} disabled={isUsed}>
+                              {dr.avatar} {dr.name} {isUsed ? "(Busy)" : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      
+                      <select
+                        value={dec.routeStrategy}
+                        onChange={(e) => setDecision(d.id, { routeStrategy: e.target.value as RouteStrategy })}
+                        className="flex-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-300 outline-none focus:border-sky-500"
+                      >
+                        <option value="fastest">⚡ Fastest</option>
+                        <option value="shortest">📏 Shortest</option>
+                        <option value="coolest">❄️ Coolest</option>
+                      </select>
+                    </div>
                   </div>
                 )}
               </div>
@@ -113,6 +148,8 @@ export default function OperatorConsole() {
         >
           ▶ Run the day
         </button>
+
+        <ComparatorModal />
       </div>
 
       {/* Right: live projected outcome */}

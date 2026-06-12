@@ -27,6 +27,7 @@ import {
   resolveCrisis,
   stepSimulation,
 } from "@/lib/engine/simulation";
+import { type WeatherData, fetchChennaiWeather } from "@/lib/weather/api";
 
 /**
  * Wall-clock interval between ticks (ms). Kept short so 1× is smooth (≈10 fps);
@@ -58,6 +59,12 @@ export interface ColdgridState {
   showHeatmap: boolean;
   /** Scripted Demo Mode is running (Phase 8). */
   demoActive: boolean;
+
+  // ── Weather Integration ─────────────────────────────────────────────────
+  weatherData: WeatherData | null;
+  liveWeatherEnabled: boolean;
+  fetchWeather: () => Promise<void>;
+  toggleLiveWeather: () => void;
 
   // ── Route selection modal ───────────────────────────────────────────────
   /** Pending dispatch options waiting for route selection. Null = modal closed. */
@@ -114,6 +121,42 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   showHeatmap: false,
   demoActive: false,
   pendingDispatch: null,
+  weatherData: null,
+  liveWeatherEnabled: false,
+
+  fetchWeather: async () => {
+    const data = await fetchChennaiWeather();
+    if (data) {
+      set({ weatherData: data });
+      // Check for heatwave auto-trigger
+      if (data.hourly.temperature_2m.some((t) => t >= 36)) {
+        // Only trigger if we aren't already in it and are in the academy
+        const academyStore = (await import("@/store/academyStore")).useAcademyStore;
+        if (academyStore.getState().scenarioId !== "heatwave") {
+          academyStore.getState().openBriefing("heatwave");
+        }
+      }
+    }
+  },
+
+  toggleLiveWeather: () => {
+    const { liveWeatherEnabled, weatherData } = get();
+    const enabled = !liveWeatherEnabled;
+    set({ liveWeatherEnabled: enabled });
+    
+    // Auto-update scenarioOffsetC and scenarioBaseRH when toggled on, if we have weather data
+    if (enabled && weatherData) {
+      const realTemp = weatherData.current.temperature_2m;
+      const realRH = weatherData.current.relative_humidity_2m;
+      set((s) => ({
+        sim: { ...s.sim, scenarioOffsetC: realTemp - 32, scenarioBaseRH: realRH } 
+      }));
+    } else {
+      set((s) => ({
+        sim: { ...s.sim, scenarioOffsetC: 0, scenarioBaseRH: undefined }
+      }));
+    }
+  },
 
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),

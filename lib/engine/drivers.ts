@@ -76,6 +76,45 @@ export const DRIVERS: DriverProfile[] = [
     cargoHandling: 0.95,
     trafficNavigation: 0.5,
   },
+  {
+    id: "anita",
+    name: "Anita",
+    avatar: "🧊",
+    title: "The Perfectionist",
+    description:
+      "Flawless handling and strictly maintains the cold chain, but runs the compressor at max power and burns a lot of fuel.",
+    speedMultiplier: 1.0,
+    fuelEfficiency: 1.6,
+    reeferDiscipline: 1.0,
+    cargoHandling: 1.0,
+    trafficNavigation: 1.0,
+  },
+  {
+    id: "karthik",
+    name: "Karthik",
+    avatar: "💥",
+    title: "The Rookie",
+    description:
+      "Eager and fast, but inexperienced. Hits potholes and forgets to check the reefer dial. Gets stuck in traffic.",
+    speedMultiplier: 1.1,
+    fuelEfficiency: 1.0,
+    reeferDiscipline: 0.65,
+    cargoHandling: 0.75,
+    trafficNavigation: 1.2,
+  },
+  {
+    id: "murugan",
+    name: "Murugan",
+    avatar: "🚚",
+    title: "The Heavy Hauler",
+    description:
+      "Drives slow and steady. Very safe and efficient, but takes much longer to arrive.",
+    speedMultiplier: 0.75,
+    fuelEfficiency: 0.9,
+    reeferDiscipline: 1.0,
+    cargoHandling: 1.0,
+    trafficNavigation: 1.0,
+  },
 ];
 
 const DRIVER_BY_ID = new Map(DRIVERS.map((d) => [d.id, d]));

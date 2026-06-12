@@ -27,3 +27,54 @@ body {
     text-shadow: 0 0 10px currentColor;
   }
 }
+
+/* ─── Truck tracking animations ──────────────────────────────────────────── */
+
+@keyframes truck-pulse {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+
+/* The pulsing live-location ring behind each truck icon */
+.truck-pulse-ring {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(56, 189, 248, 0.9); /* sky-400 */
+  animation: truck-pulse 2s ease-out infinite;
+  pointer-events: none;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* The blinking red dot inside the LIVE badge */
+@keyframes live-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.35; transform: scale(0.75); }
+}
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: live-dot-pulse 1.4s ease-in-out infinite;
+}
+
+/* Pulsing destination pin */
+@keyframes dest-pulse {
+  0%   { transform: scale(1);   opacity: 0.9; }
+  60%  { transform: scale(1.8); opacity: 0.2; }
+  100% { transform: scale(1);   opacity: 0.9; }
+}
+.dest-pin-pulse {
+  animation: dest-pulse 1.6s ease-in-out infinite;
+}
+
+/* Quality bar smooth transition */
+.quality-bar-fill {
+  transition: width 0.6s ease, background-color 0.6s ease;
+}
+

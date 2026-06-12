@@ -18,6 +18,8 @@ function ambientPlan(scenarioId: string): DeliveryDecision[] {
     dispatched: true,
     reefer: false,
     setpointC: 4,
+    driverId: "kumar",
+    routeStrategy: "fastest",
   }));
 }
 
@@ -74,6 +76,8 @@ describe("scoring discriminates good play from bad", () => {
       dispatched: true,
       reefer: true,
       setpointC: 2,
+      driverId: "kumar",
+      routeStrategy: "fastest",
     }));
     const score = scoreScenario(s, simulateScenario(s, reeferAll).results);
     expect(score.overBudget).toBe(true);

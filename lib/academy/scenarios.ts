@@ -161,16 +161,20 @@ export function getScenario(id: string): Scenario {
   return s;
 }
 
+import { DRIVERS } from "../engine/drivers";
+
 /**
  * A sensible starting plan for a scenario's console: refrigerate the fragile
  * produce at a cold setpoint, send hardy produce ambient. Also a reasonable
  * baseline for tests. The operator can override any of it.
  */
 export function suggestedDecisions(scenario: Scenario, setpointC = 3): DeliveryDecision[] {
-  return scenario.requiredDeliveries.map((d) => ({
+  return scenario.requiredDeliveries.map((d, i) => ({
     deliveryId: d.id,
     dispatched: true,
     reefer: FRAGILE.includes(d.produce),
     setpointC,
+    driverId: DRIVERS[i % DRIVERS.length].id,
+    routeStrategy: "fastest",
   }));
 }

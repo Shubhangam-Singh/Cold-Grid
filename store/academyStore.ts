@@ -80,6 +80,8 @@ function loadPlannedOntoMap(scenarioId: string, decisions: Record<string, Delive
       toId: d.toId,
       label: d.label,
       transportSetpointC: decision.reefer ? decision.setpointC : null,
+      driverId: decision.driverId,
+      routeStrategy: decision.routeStrategy,
     });
   }
 }

@@ -7,14 +7,16 @@
  * basemap (RULE 3).
  */
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import DeckGL from "@deck.gl/react";
-import { PathLayer, ScatterplotLayer, TextLayer, IconLayer } from "@deck.gl/layers";
+import { PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import { TripsLayer } from "@deck.gl/geo-layers";
 import { HeatmapLayer } from "@deck.gl/aggregation-layers";
 import type { Color, PickingInfo } from "@deck.gl/core";
+import { WebMercatorViewport } from "@deck.gl/core";
 import { Map } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
+import TruckMarker from "./TruckMarker";
 
 import {
   type CityEdge,
@@ -31,10 +33,8 @@ import {
   createBatch,
   predictedShelfLifeHours,
 } from "@/lib/engine/spoilage";
-import type { Shipment } from "@/lib/engine/simulation";
 import { getProduce } from "@/lib/engine/produce";
-import { getDriver } from "@/lib/engine/drivers";
-import { useColdgridStore, TICK_INTERVAL_MS } from "@/store/coldgridStore";
+import { useColdgridStore } from "@/store/coldgridStore";
 import { NODE_TYPE_STYLE, qualityToRgb, rgbCss, tempToRgb } from "./colors";
 
 const CARTO_DARK =
@@ -55,6 +55,7 @@ interface RouteDatum {
   timestamps: number[];
   quality: number;
   active: boolean;
+  traveled: boolean; // true = this segment is already behind the truck
 }
 
 interface RiskPoint {
@@ -116,86 +117,6 @@ function nodeTooltipHtml(node: CityNode, tempC: number): string {
     ${produceBlock}`;
 }
 
-function getTopDownTruckSvg(driverId: string) {
-  const colorMap: Record<string, string> = {
-    kumar: "#f8fafc", // white
-    ravi: "#fee2e2", // light red
-    priya: "#dcfce7", // light green
-    deepak: "#e0f2fe", // light blue
-  };
-  const color = colorMap[driverId] || "#f8fafc";
-  const stroke = driverId === "kumar" ? "#cbd5e1" :
-                 driverId === "ravi" ? "#fca5a5" :
-                 driverId === "priya" ? "#86efac" : "#7dd3fc";
-
-  const svg = `
-<svg width="64" height="128" viewBox="0 0 64 128" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3" />
-    </filter>
-  </defs>
-  <g filter="url(#shadow)">
-    <!-- Side Mirrors -->
-    <rect x="6" y="16" width="6" height="12" rx="2" fill="#334155" />
-    <rect x="52" y="16" width="6" height="12" rx="2" fill="#334155" />
-
-    <!-- Cab Base (hood to back of cab) -->
-    <path d="M 14 24 C 14 6, 50 6, 50 24 L 50 40 L 14 40 Z" fill="#f1f5f9"/>
-    
-    <!-- Bumper -->
-    <rect x="16" y="6" width="32" height="4" rx="2" fill="#64748b"/>
-
-    <!-- Headlights -->
-    <rect x="18" y="5" width="8" height="4" rx="2" fill="#fef08a" />
-    <rect x="38" y="5" width="8" height="4" rx="2" fill="#fef08a" />
-    
-    <!-- Windshield -->
-    <path d="M 18 20 C 18 10, 46 10, 46 20 L 46 28 C 46 30, 18 30, 18 28 Z" fill="#0f172a"/>
-    
-    <!-- Cargo Box -->
-    <rect x="8" y="38" width="48" height="84" rx="4" fill="${color}" stroke="${stroke}" stroke-width="2"/>
-    
-    <!-- Taillights -->
-    <rect x="12" y="120" width="10" height="4" rx="2" fill="#ef4444" />
-    <rect x="42" y="120" width="10" height="4" rx="2" fill="#ef4444" />
-    
-    <!-- Roof details on cargo box -->
-    <line x1="8" y1="48" x2="56" y2="48" stroke="${stroke}" stroke-width="1.5" opacity="0.6" />
-    <line x1="8" y1="64" x2="56" y2="64" stroke="${stroke}" stroke-width="1.5" opacity="0.6" />
-    <line x1="8" y1="80" x2="56" y2="80" stroke="${stroke}" stroke-width="1.5" opacity="0.6" />
-    <line x1="8" y1="96" x2="56" y2="96" stroke="${stroke}" stroke-width="1.5" opacity="0.6" />
-    <line x1="8" y1="112" x2="56" y2="112" stroke="${stroke}" stroke-width="1.5" opacity="0.6" />
-  </g>
-</svg>
-`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.trim())}`;
-}
-
-function shipmentTooltipHtml(s: Shipment): string {
-  const profile = getProduce(s.produce);
-  const driver = getDriver(s.driverId);
-  const qColor = rgbCss(qualityToRgb(s.batch.quality));
-  const tColor = rgbCss(tempToRgb(s.lastTempC));
-  const pred = predictedShelfLifeHours(s.batch, profile, s.lastTempC);
-  const spoiled = s.batch.quality <= 0;
-  const transport =
-    s.transportSetpointC != null
-      ? `❄ Reefer @ ${s.transportSetpointC.toFixed(0)}°C`
-      : "Ambient truck";
-  return `<div style="font-weight:600;font-size:13px">${profile.label} shipment ${s.id}</div>
-    <div style="font-size:10px;color:#64748b;margin-top:2px">${getNode(s.originId).name} → ${getNode(s.destinationId).name} · ${transport}</div>
-    <div style="font-size:10px;color:#94a3b8;margin-top:2px">${driver.avatar} ${driver.name} · ${driver.title}</div>
-    <div style="margin-top:6px">Quality: <span style="font-family:${MONO};color:${qColor};font-weight:600">${s.batch.quality.toFixed(
-      0
-    )}%</span>${spoiled ? ' <span style="color:#ef4444">⚠ SPOILED</span>' : ""}</div>
-    <div>Cargo temp: <span style="font-family:${MONO};color:${tColor}">${s.lastTempC.toFixed(
-      1
-    )}°C</span> · RH <span style="font-family:${MONO}">${s.lastRH.toFixed(0)}%</span></div>
-    <div>Est. life left @ temp: <span style="font-family:${MONO}">~${pred.toFixed(1)} h</span></div>
-    <div style="color:#94a3b8;font-size:11px;margin-top:4px">Thermal breaches: ${s.batch.breachTicks} ticks</div>
-    <div style="color:#38bdf8;font-size:10px;margin-top:4px">click → decay curve</div>`;
-}
 
 export default function DeckMap() {
   const nodes = useColdgridStore((s) => s.nodes);
@@ -209,7 +130,19 @@ export default function DeckMap() {
   const setSelectedNode = useColdgridStore((s) => s.setSelectedNode);
   const setSelectedShipment = useColdgridStore((s) => s.setSelectedShipment);
   const showHeatmap = useColdgridStore((s) => s.showHeatmap);
-  const speed = useColdgridStore((s) => s.speed);
+
+  // Viewport ref — updated on every view-state change so TruckMarker can project lon/lat → pixels
+  const viewportRef = useRef<WebMercatorViewport | null>(null);
+  useEffect(() => {
+    // Initialise with a best-guess size; will be overwritten on first viewState change
+    if (typeof window !== "undefined") {
+      viewportRef.current = new WebMercatorViewport({
+        ...INITIAL_VIEW_STATE,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    }
+  }, []);
 
   // Global time loop for pulsing TripsLayer (0 to 100)
   const [time, setTime] = useState(0);
@@ -256,9 +189,21 @@ export default function DeckMap() {
             timestamps,
             quality: s.batch.quality,
             active: i === s.legIndex,
+            traveled: i < s.legIndex,
           };
         })
       ),
+    [inTransit]
+  );
+
+  // Destination positions for trucks approaching their final 2 legs
+  const destPulseData = useMemo(() =>
+    inTransit
+      .filter((s) => s.route.length - s.legIndex <= 2)
+      .map((s) => ({
+        position: getEdge(s.route[s.route.length - 1]).to,
+        shipmentId: s.id,
+      })),
     [inTransit]
   );
 
@@ -317,12 +262,26 @@ export default function DeckMap() {
       },
     });
 
-    const routeHighlight = new PathLayer<RouteDatum>({
-      id: "route-paths",
-      data: routeData,
+    // Traveled route: dim desaturated grey-blue
+    const routeTraveled = new PathLayer<RouteDatum>({
+      id: "route-traveled",
+      data: routeData.filter((d) => d.traveled),
       getPath: (d) => d.path,
-      getColor: (d) => [...qualityToRgb(d.quality), d.active ? 235 : 90],
-      getWidth: (d) => (d.active ? 3.5 : 1.8),
+      getColor: [74, 85, 104, 120], // slate-600, desaturated
+      getWidth: 2,
+      widthUnits: "pixels",
+      capRounded: true,
+      jointRounded: true,
+      pickable: false,
+    });
+
+    // Upcoming route: quality-tinted bright
+    const routeAhead = new PathLayer<RouteDatum>({
+      id: "route-ahead",
+      data: routeData.filter((d) => !d.traveled),
+      getPath: (d) => d.path,
+      getColor: (d) => [...qualityToRgb(d.quality), d.active ? 240 : 110],
+      getWidth: (d) => (d.active ? 4 : 2),
       widthUnits: "pixels",
       capRounded: true,
       jointRounded: true,
@@ -335,15 +294,33 @@ export default function DeckMap() {
       getPath: (d) => d.path,
       getTimestamps: (d) => d.timestamps,
       getColor: (d) => qualityToRgb(d.quality),
-      opacity: 1.0,
-      widthMinPixels: 4,
-      trailLength: 40,
+      opacity: 0.95,
+      widthMinPixels: 5,
+      trailLength: 28,
       currentTime: time,
       capRounded: true,
       jointRounded: true,
       updateTriggers: {
         getColor: [routeData],
       },
+    });
+
+    // Pulsing destination pin for trucks close to arrival
+    const destPulseLayer = new ScatterplotLayer({
+      id: "dest-pulse",
+      data: destPulseData,
+      getPosition: (d: { position: string; shipmentId: string }) => {
+        try { return getNode(d.position).coordinates; } catch { return [80.237, 13.062] as [number, number]; }
+      },
+      radiusUnits: "pixels",
+      getRadius: 14 + Math.sin(time / 5) * 5, // pulsing radius via time
+      getFillColor: [56, 189, 248, 80],
+      getLineColor: [56, 189, 248, 200],
+      lineWidthMinPixels: 2,
+      stroked: true,
+      filled: true,
+      pickable: false,
+      updateTriggers: { getRadius: [time] },
     });
 
     const nodeLayer = new TextLayer<CityNode>({
@@ -374,47 +351,8 @@ export default function DeckMap() {
       },
     });
 
-    const transitionDuration = TICK_INTERVAL_MS / speed;
-
-    const shipmentHalo = new ScatterplotLayer<Shipment>({
-      id: "shipment-halo",
-      data: inTransit,
-      getPosition: (s) => s.position,
-      radiusUnits: "pixels",
-      getRadius: 22, // Adjusted for smaller truck
-      getFillColor: (s) => [...qualityToRgb(s.batch.quality), 90], // Brighter glow
-      pickable: false,
-      updateTriggers: { getFillColor: [inTransit] },
-      transitions: {
-        getPosition: { duration: transitionDuration, easing: (t: number) => t },
-      },
-    });
-
-    const shipmentLayer = new IconLayer<Shipment>({
-      id: "shipments",
-      data: inTransit,
-      getPosition: (s) => s.position,
-      getIcon: (s) => ({
-        url: getTopDownTruckSvg(s.driverId),
-        width: 64,
-        height: 128,
-        anchorY: 64,
-      }),
-      getSize: 45,
-      getAngle: (s) => s.angle || 0,
-      sizeUnits: "pixels",
-      sizeScale: 1,
-      pickable: true,
-      autoHighlight: true,
-      highlightColor: [255, 255, 255, 100],
-      onClick: (info: PickingInfo<Shipment>) =>
-        setSelectedShipment(info.object ? info.object.id : null),
-      updateTriggers: { getIcon: [inTransit], getAngle: [inTransit] },
-      transitions: {
-        // Only interpolate position — angle is smoothed in the engine.
-        getPosition: { duration: transitionDuration, easing: (t: number) => t },
-      },
-    });
+    // Trucks are now rendered as HTML overlays via TruckMarker (below).
+    // No deck.gl IconLayer or halo ScatterplotLayer for shipments.
 
     const labelLayer = new TextLayer<CityNode>({
       id: "labels",
@@ -435,7 +373,7 @@ export default function DeckMap() {
       pickable: false,
     });
 
-    const base = [roadLayer, trafficLayer, routeHighlight, routeTrips, shipmentHalo, nodeLayer, shipmentLayer, labelLayer];
+    const base = [roadLayer, trafficLayer, routeTraveled, routeAhead, routeTrips, destPulseLayer, nodeLayer, labelLayer];
     return showHeatmap ? [heatLayer, ...base] : base;
     // tempOf closes over hourOfDay/scenarioOffsetC; listed below so layers rebuild.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -453,44 +391,52 @@ export default function DeckMap() {
     setHoveredNode,
     setSelectedNode,
     setSelectedShipment,
+    destPulseData,
     time,
-    speed,
   ]);
 
   return (
-    <DeckGL
-      initialViewState={INITIAL_VIEW_STATE}
-      controller={true}
-      layers={layers}
-      getCursor={({ isHovering }) => (isHovering ? "pointer" : "grab")}
-      getTooltip={(info: PickingInfo) => {
-        if (!info.object) return null;
-        const layerId = info.layer?.id;
-        let html: string | null = null;
-        if (layerId === "nodes") {
-          const node = info.object as CityNode;
-          html = nodeTooltipHtml(node, tempOf(node));
-        } else if (layerId === "shipments") {
-          html = shipmentTooltipHtml(info.object as Shipment);
-        }
-        if (!html) return null;
-        return {
-          html,
-          style: {
-            backgroundColor: "rgba(2,6,23,0.96)",
-            color: "#e2e8f0",
-            border: "1px solid #1e293b",
-            borderRadius: "8px",
-            padding: "10px 12px",
-            fontSize: "12px",
-            fontFamily: "var(--font-sans), sans-serif",
-            maxWidth: "270px",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.55)",
-          },
-        };
-      }}
-    >
-      <Map reuseMaps mapStyle={CARTO_DARK} />
-    </DeckGL>
+    <div className="relative h-full w-full">
+      <DeckGL
+        initialViewState={INITIAL_VIEW_STATE}
+        controller={true}
+        layers={layers}
+        onViewStateChange={({ viewState }) => {
+          viewportRef.current = new WebMercatorViewport(viewState as Parameters<typeof WebMercatorViewport>[0]);
+        }}
+        getCursor={({ isHovering }) => (isHovering ? "pointer" : "grab")}
+        getTooltip={(info: PickingInfo) => {
+          if (!info.object) return null;
+          const layerId = info.layer?.id;
+          let html: string | null = null;
+          if (layerId === "nodes") {
+            const node = info.object as CityNode;
+            html = nodeTooltipHtml(node, tempOf(node));
+          }
+          if (!html) return null;
+          return {
+            html,
+            style: {
+              backgroundColor: "rgba(2,6,23,0.96)",
+              color: "#e2e8f0",
+              border: "1px solid #1e293b",
+              borderRadius: "8px",
+              padding: "10px 12px",
+              fontSize: "12px",
+              fontFamily: "var(--font-sans), sans-serif",
+              maxWidth: "270px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.55)",
+            },
+          };
+        }}
+      >
+        <Map reuseMaps mapStyle={CARTO_DARK} />
+      </DeckGL>
+
+      {/* HTML truck overlays — 60fps rAF-smoothed, project lon/lat via viewportRef */}
+      {inTransit.map((s) => (
+        <TruckMarker key={s.id} shipment={s} viewportRef={viewportRef} />
+      ))}
+    </div>
   );
 }

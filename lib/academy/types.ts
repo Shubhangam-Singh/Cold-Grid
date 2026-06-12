@@ -8,6 +8,7 @@
  */
 
 import type { ProduceId } from "../engine/types";
+import type { RouteStrategy } from "../city/chennai";
 
 export interface RequiredDelivery {
   id: string;
@@ -57,4 +58,6 @@ export interface DeliveryDecision {
   dispatched: boolean;
   reefer: boolean;
   setpointC: number;
+  driverId: string;
+  routeStrategy: RouteStrategy;
 }

@@ -89,7 +89,7 @@ export default function RouteSelectionModal() {
           <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500 mb-2">
             Assign Driver
           </div>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {DRIVERS.map((d) => {
               const selected = d.id === selectedDriverId;
               return (

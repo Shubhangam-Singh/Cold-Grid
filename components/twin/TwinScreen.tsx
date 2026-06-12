@@ -17,6 +17,8 @@ import DemoMode from "./DemoMode";
 import CopilotPanel from "@/components/learning/CopilotPanel";
 import RouteSelectionModal from "./RouteSelectionModal";
 import CrisisAlert from "./CrisisAlert";
+import WeatherWidget from "./WeatherWidget";
+import TrackingCard from "./TrackingCard";
 
 const DeckMap = dynamic(() => import("./DeckMap"), {
   ssr: false,
@@ -40,6 +42,9 @@ export default function TwinScreen() {
           <CityClock />
         </div>
         <div className="pointer-events-auto">
+          <WeatherWidget />
+        </div>
+        <div className="pointer-events-auto">
           <ShipmentPanel />
         </div>
       </div>
@@ -49,6 +54,7 @@ export default function TwinScreen() {
       <ShipmentDecayModal />
       <CrisisAlert />
       <RouteSelectionModal />
+      <TrackingCard />
     </div>
   );
 }

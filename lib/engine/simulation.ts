@@ -19,6 +19,8 @@ import {
   getNode,
   pathPositionAndAngle,
   planRoute,
+  planRouteOptions,
+  type RouteStrategy,
   trafficMultiplier,
 } from "../city/chennai";
 import { mulberry32 } from "./rng";
@@ -89,6 +91,8 @@ export interface SimulationState {
   hourOfDay: number;
   /** Scenario ambient override °C (heatwave +5, monsoon −2, …). */
   scenarioOffsetC: number;
+  /** Scenario base relative humidity (live weather override). */
+  scenarioBaseRH?: number;
   /** Roads closed by a scenario (flood). Route planning avoids these. */
   closedEdgeIds: string[];
   shipments: Shipment[];
@@ -139,13 +143,14 @@ export function syntheticSensors(args: {
   key: string;
   tick: number;
   baseTempC: number;
+  baseRHPct?: number;
   profile: ProduceProfile;
   batch: Batch;
 }): { T_C: number; RH: number; VOC: number } {
-  const { seed, key, tick, baseTempC, profile, batch } = args;
+  const { seed, key, tick, baseTempC, baseRHPct, profile, batch } = args;
   const n = (salt: string) => noise01(seed, key + salt, tick) * 2 - 1; // [-1,1)
   const T_C = baseTempC + n("T") * 0.8;
-  const RH = clamp(80 + n("H") * 10, 40, 100);
+  const RH = clamp((baseRHPct ?? 80) + n("H") * 10, 40, 100);
   const VOC = Math.max(0, profile.vocRef + batch.cumulativeDeg * 150 + n("G") * 8);
   return { T_C, RH, VOC };
 }
@@ -160,6 +165,7 @@ interface StepContext {
   tick: number;
   hourOfDay: number;
   scenarioOffsetC: number;
+  scenarioBaseRH?: number;
   dtHours: number;
   closedEdgeIds: string[];
 }
@@ -189,6 +195,7 @@ export function advanceShipment(s: Shipment, ctx: StepContext): Shipment {
     key: `${s.id}|${edge.id}`,
     tick: ctx.tick,
     baseTempC: baseTemp,
+    baseRHPct: ctx.scenarioBaseRH,
     profile,
     batch: s.batch,
   });
@@ -281,6 +288,8 @@ export interface DispatchOptions {
   route?: string[];
   /** Assigned driver ID. Defaults to DEFAULT_DRIVER_ID. */
   driverId?: string;
+  /** Route selection strategy. Defaults to "fastest". */
+  routeStrategy?: RouteStrategy;
 }
 
 /**
@@ -292,9 +301,16 @@ export function dispatchShipment(
   state: SimulationState,
   opts: DispatchOptions
 ): SimulationState {
-  const route = opts.route ?? planRoute(opts.fromId, opts.toId, {
-    closedEdgeIds: state.closedEdgeIds,
-  });
+  let route = opts.route;
+  if (!route) {
+    const strategy = opts.routeStrategy ?? "fastest";
+    const options = planRouteOptions(opts.fromId, opts.toId, {
+      hourOfDay: state.hourOfDay,
+      closedEdgeIds: state.closedEdgeIds,
+    });
+    route = options.find((o) => o.id === strategy)?.edgeIds ?? options[0]?.edgeIds ?? [];
+  }
+  
   if (route === null || route.length === 0) return state;
 
   const id = `S${state.nextId}`;
@@ -363,6 +379,7 @@ export function stepSimulation(
     tick: state.tick,
     hourOfDay: state.hourOfDay,
     scenarioOffsetC: state.scenarioOffsetC,
+    scenarioBaseRH: state.scenarioBaseRH,
     dtHours,
     closedEdgeIds: state.closedEdgeIds,
   };
