@@ -7,7 +7,7 @@
  */
 
 import { mulberry32 } from "./rng";
-import { getEdge, getNode, planRoute } from "../city/chennai";
+import { getEdge, getNode, planRoute, CHENNAI_NODES, haversineKm } from "../city/chennai";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -26,7 +26,8 @@ export type CrisisEffect =
   | { type: "reroute"; newEdgeIds: string[] }
   | { type: "wait"; delayMinutes: number }
   | { type: "reefer_off" }
-  | { type: "push_through"; speedPenalty: number };
+  | { type: "push_through"; speedPenalty: number }
+  | { type: "divert_to_hub"; hubId: string; hubName: string; newEdgeIds: string[] };
 
 export interface CrisisEvent {
   id: string;
@@ -69,6 +70,45 @@ const CRISIS_META: Record<
     icon: "💥",
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hub nearest-neighbour helper
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Find the nearest cold hub to the truck's current edge start node,
+ * excluding the truck's own destination (so we don't "divert" to where
+ * it's already going) and hubs that are unreachable under current closures.
+ */
+function findNearestHub(
+  currentEdgeId: string,
+  destinationId: string,
+  closedEdgeIds: string[]
+): { hubId: string; hubName: string; route: string[] } | null {
+  const edge = getEdge(currentEdgeId);
+  const fromNodeId = edge.from;
+  const fromNode = getNode(fromNodeId);
+
+  const hubs = CHENNAI_NODES.filter(
+    (n) => n.type === "hub" && n.id !== destinationId
+  );
+
+  let best: { hubId: string; hubName: string; route: string[]; dist: number } | null = null;
+
+  for (const hub of hubs) {
+    // Check a route exists from current edge start to hub
+    const route = planRoute(fromNodeId, hub.id, { closedEdgeIds });
+    if (!route || route.length === 0) continue;
+
+    // Use straight-line distance as tiebreaker (route length is primary)
+    const dist = haversineKm(fromNode.coordinates, hub.coordinates);
+    if (!best || dist < best.dist) {
+      best = { hubId: hub.id, hubName: hub.name, route, dist };
+    }
+  }
+
+  return best ? { hubId: best.hubId, hubName: best.hubName, route: best.route } : null;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Deterministic crisis generation
@@ -156,6 +196,22 @@ export function generateCrisisOptions(
         description: "Crawl past the accident at half speed. Risky but direct.",
         effect: { type: "push_through", speedPenalty: 0.4 },
       });
+
+      // Option 4: Divert to nearest cold hub (safe haven)
+      const hubForAccident = findNearestHub(currentEdgeId, destinationId, closedEdgeIds);
+      if (hubForAccident) {
+        options.push({
+          id: "divert_hub",
+          label: `❄️ Divert → ${hubForAccident.hubName}`,
+          description: `Park cargo safely in refrigerated storage at ${hubForAccident.hubName} while the road clears.`,
+          effect: {
+            type: "divert_to_hub",
+            hubId: hubForAccident.hubId,
+            hubName: hubForAccident.hubName,
+            newEdgeIds: hubForAccident.route,
+          },
+        });
+      }
       break;
     }
 
@@ -168,7 +224,7 @@ export function generateCrisisOptions(
         effect: { type: "reefer_off" },
       });
 
-      // Option 2: Emergency stop
+      // Option 2: Emergency roadside repair
       options.push({
         id: "wait",
         label: "Roadside Repair",
@@ -176,7 +232,23 @@ export function generateCrisisOptions(
         effect: { type: "wait", delayMinutes: 15 },
       });
 
-      // Option 3: Push through fast
+      // Option 3: Divert to nearest cold hub — most important for reefer failure!
+      const hubForReefer = findNearestHub(currentEdgeId, destinationId, closedEdgeIds);
+      if (hubForReefer) {
+        options.push({
+          id: "divert_hub",
+          label: `❄️ Divert → ${hubForReefer.hubName}`,
+          description: `Rush to ${hubForReefer.hubName} cold storage. Cargo saved at hub refrigeration setpoint.`,
+          effect: {
+            type: "divert_to_hub",
+            hubId: hubForReefer.hubId,
+            hubName: hubForReefer.hubName,
+            newEdgeIds: hubForReefer.route,
+          },
+        });
+      }
+
+      // Option 4: Push through fast to destination
       options.push({
         id: "push",
         label: "Sprint to Destination",

@@ -313,6 +313,11 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
       case "reroute":
         nextState = "REROUTING";
         break;
+      case "divert_to_hub":
+        // Treated identically to reroute from the truck-animation perspective.
+        // The engine's resolveCrisis will update the shipment's destinationId + route.
+        nextState = "REROUTING";
+        break;
     }
 
     // Visual overlays
@@ -321,12 +326,47 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
     if (option.effect.type === "reroute") {
       newRerouted[crisis.shipmentId] = option.effect.newEdgeIds;
       if (!newBlocked.includes(crisis.edgeId)) newBlocked.push(crisis.edgeId);
+    } else if (option.effect.type === "divert_to_hub") {
+      // Flash the hub diversion route on the map, same as a reroute
+      newRerouted[crisis.shipmentId] = option.effect.newEdgeIds;
+      if (!newBlocked.includes(crisis.edgeId)) newBlocked.push(crisis.edgeId);
     } else if (option.effect.type === "wait" && crisis.type === "road_accident") {
       if (!newBlocked.includes(crisis.edgeId)) newBlocked.push(crisis.edgeId);
     }
 
-    // Apply engine-level resolution
-    const newSim = resolveCrisis(sim, crisis.id, optionId);
+    // Apply engine-level resolution.
+    // For divert_to_hub: the engine has no case for it, so we patch the crisis
+    // option to look like a plain "reroute" before passing to the engine. This
+    // keeps the engine untouched while still correctly replacing the route.
+    let simForEngine = sim;
+    if (option.effect.type === "divert_to_hub") {
+      const { newEdgeIds, hubId } = option.effect;
+      simForEngine = {
+        ...sim,
+        activeCrises: sim.activeCrises.map((c) => {
+          if (c.id !== crisisId) return c;
+          return {
+            ...c,
+            options: c.options.map((o) => {
+              if (o.id !== optionId) return o;
+              return {
+                ...o,
+                // Masquerade as reroute so the engine applies the route swap
+                effect: { type: "reroute" as const, newEdgeIds },
+              };
+            }),
+            // Also update the shipment's destinationId to the hub in the shipment list
+          };
+        }),
+        // Redirect destination to hub
+        shipments: sim.shipments.map((s) => {
+          if (s.id !== crisis.shipmentId) return s;
+          return { ...s, destinationId: hubId };
+        }),
+      };
+    }
+
+    const newSim = resolveCrisis(simForEngine, crisis.id, optionId);
     set({ sim: newSim, activeCrisisId: null, blockedEdgeIds: newBlocked, reroutedShipments: newRerouted });
 
     // After 0.8s confirmation animation:
