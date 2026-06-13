@@ -1,0 +1,22 @@
+{
+  "name": "coldgrid-contracts",
+  "private": true,
+  "version": "0.1.0",
+  "description": "ColdGrid Phase 9 — ColdChainAttestation + ComplianceEscrow (Hardhat). Local node / free testnet only; no mainnet, no real money.",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/node": "^20",
+    "hardhat": "^2.22.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0"
+  }
+}
