@@ -77,7 +77,8 @@ export default function SimulationClock() {
                 edgeId,
                 targetShipment.destinationId,
                 sim.tick,
-                sim.closedEdgeIds
+                sim.closedEdgeIds,
+                targetShipment.batch.quality
               );
               useColdgridStore.setState((s) => ({
                 sim: { ...s.sim, activeCrises: [...s.sim.activeCrises, crisis] },

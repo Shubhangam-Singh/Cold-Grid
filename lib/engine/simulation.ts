@@ -78,6 +78,8 @@ export interface Shipment {
   crisisSpeedPenalty: number;
   /** Per-leg crisis tracking: legs that already triggered a crisis check. */
   crisisCheckedLegs: number[];
+  /** Set to true if redirected to a community kitchen. */
+  diverted?: boolean;
 }
 
 export interface SimulationState {
@@ -409,7 +411,8 @@ export function stepSimulation(
           edge.id,
           advanced.destinationId,
           state.tick,
-          state.closedEdgeIds
+          state.closedEdgeIds,
+          advanced.batch.quality
         );
         newCrises.push(crisis);
         // If reefer breakdown, disable reefer

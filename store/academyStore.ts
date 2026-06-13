@@ -32,6 +32,7 @@ export type AcademyPhase =
 export interface CompletedRecord {
   stars: number;
   composite: number;
+  foodSavedKg?: number;
 }
 
 interface AcademyState {
@@ -140,7 +141,7 @@ export const useAcademyStore = create<AcademyState>((set, get) => ({
     const prev = completed[scenarioId];
     const best =
       !prev || score.composite > prev.composite
-        ? { stars: score.stars, composite: score.composite }
+        ? { stars: score.stars, composite: score.composite, foodSavedKg: score.foodSavedKg }
         : prev;
     set({ phase: "result", completed: { ...completed, [scenarioId]: best } });
   },

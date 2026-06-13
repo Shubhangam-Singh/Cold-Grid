@@ -19,6 +19,8 @@ export interface FleetMetrics {
   costRupees: number;
   /** 0–100 reputation: clean slate until deliveries land, then tracks food saved. */
   reputation: number;
+  /** Total food (kg) diverted to community kitchens. */
+  foodDivertedKg: number;
 }
 
 export function fleetMetrics(shipments: Shipment[]): FleetMetrics {
@@ -34,6 +36,8 @@ export function fleetMetrics(shipments: Shipment[]): FleetMetrics {
       ? delivered.reduce((sum, s) => sum + s.batch.quality, 0) / delivered.length
       : null;
 
+  const foodDivertedKg = shipments.filter(s => s.diverted).length * 1500; // 1500kg per diverted truck
+
   return {
     total: shipments.length,
     inTransit: inTransit.length,
@@ -44,5 +48,6 @@ export function fleetMetrics(shipments: Shipment[]): FleetMetrics {
     co2Kg: energyKwh * CO2_PER_KWH + distanceKm * CO2_PER_KM,
     costRupees: energyKwh * COST_PER_KWH + distanceKm * COST_PER_KM,
     reputation: foodSavedPct ?? 100,
+    foodDivertedKg,
   };
 }

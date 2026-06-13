@@ -62,9 +62,10 @@ export default function ResultScreen() {
         </div>
 
         {/* Score breakdown */}
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
           <Stat label="Food saved" value={`${score.foodSavedPct.toFixed(0)}%`} />
           <Stat label="On-time" value={`${score.onTimePct.toFixed(0)}%`} />
+          <Stat label="Community" value={`${score.foodSavedKg} kg`} />
           <Stat label="CO₂" value={`${score.co2Kg.toFixed(1)} kg`} />
           <Stat
             label="Energy"

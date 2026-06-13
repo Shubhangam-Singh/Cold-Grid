@@ -20,6 +20,12 @@ export default function Home() {
             13.0827° N · 80.2707° E · Tamil Nadu
           </span>
           <Link
+            href="/ledger"
+            className="rounded-md border border-twin-cyan/40 bg-twin-cyan/10 px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-twin-cyan transition-all duration-300 hover:scale-105 hover:bg-twin-cyan/20 hover:shadow-[0_0_15px_rgba(0,240,255,0.3)]"
+          >
+            Trust Layer →
+          </Link>
+          <Link
             href="/academy"
             className="group relative overflow-hidden rounded-md border border-twin-amber/40 bg-twin-amber/10 px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-twin-amber transition-all duration-300 hover:scale-105 hover:bg-twin-amber/20 hover:shadow-[0_0_15px_rgba(255,176,0,0.3)]"
           >

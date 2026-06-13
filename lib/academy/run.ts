@@ -26,6 +26,7 @@ export interface DeliveryResult {
   distanceKm: number;
   reefer: boolean;
   spoiled: boolean;
+  diverted: boolean;
   /** Per-tick degradation history for the decay-curve viewer. */
   history: BatchHistoryPoint[];
 }
@@ -95,6 +96,7 @@ export function simulateScenario(
         distanceKm: 0,
         reefer: false,
         spoiled: true,
+        diverted: false,
         history: [],
       };
     }
@@ -108,6 +110,7 @@ export function simulateScenario(
       distanceKm: routeDistanceKm(ship.route),
       reefer: ship.transportSetpointC != null,
       spoiled: ship.batch.quality <= 0,
+      diverted: !!ship.diverted,
       history: ship.batch.history,
     };
   });

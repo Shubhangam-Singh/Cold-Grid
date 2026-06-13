@@ -78,6 +78,8 @@ export const NODE_TYPE_STYLE: Record<
   source: { label: "Source / wholesale", radiusPx: 13, fill: [15, 23, 42], glyph: "▲" },
   hub: { label: "Cold-storage hub", radiusPx: 11, fill: [8, 47, 73], glyph: "■" },
   retail: { label: "Retail / vendor zone", radiusPx: 8, fill: [30, 41, 59], glyph: "●" },
+  urban_farm: { label: "Urban Farm", radiusPx: 10, fill: [20, 83, 45], glyph: "🌱" },
+  community_kitchen: { label: "Community Kitchen", radiusPx: 11, fill: [124, 45, 18], glyph: "🍳" },
 };
 
 /** Legend ramp swatches (label + color), coarse sampling of the temp ramp. */

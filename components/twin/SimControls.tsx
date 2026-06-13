@@ -99,9 +99,8 @@ export default function SimControls() {
         <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
           Operations
         </div>
-
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
           <button onClick={togglePlay} className={`${btn(isPlaying)} min-w-[64px]`} aria-pressed={isPlaying}>
             {isPlaying ? "❚❚ Pause" : "▶ Play"}
           </button>
@@ -256,7 +255,6 @@ export default function SimControls() {
           </button>
         </div>
       </div>
-        </div>
       </div>
     </div>
   );

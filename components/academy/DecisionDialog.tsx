@@ -61,6 +61,8 @@ const OPTION_ACCENT: Record<string, string> = {
   ambient: "border-orange-500/40 bg-orange-500/8 hover:bg-orange-500/15 text-orange-200",
   // ❄️ Hub diversion — distinct ice-blue to signal "safe haven"
   divert_hub: "border-sky-400/50 bg-sky-500/10 hover:bg-sky-500/20 text-sky-200 ring-1 ring-sky-400/30",
+  // 🍳 Kitchen diversion — orange
+  divert_kitchen: "border-orange-500/50 bg-orange-500/10 hover:bg-orange-500/20 text-orange-200 ring-1 ring-orange-500/30",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,6 +105,10 @@ function computeOptionPreview(
       timePenaltyMin = 12; // estimated time overhead for diversion
       // Cargo reaches hub refrigeration — approximate as reefer-on temp
       tempForPrediction = shipment.transportSetpointC ?? 5;
+      break;
+    case "divert_kitchen":
+      timePenaltyMin = 8;
+      tempForPrediction = shipment.transportSetpointC ?? ambientC;
       break;
   }
 

@@ -63,7 +63,7 @@ describe("geographic integrity (spec §6 bounding box)", () => {
 describe("node validity (type + ambient value)", () => {
   it("every node has a valid type", () => {
     for (const n of CHENNAI_NODES) {
-      expect(["source", "hub", "retail"]).toContain(n.type);
+      expect(["source", "hub", "retail", "urban_farm", "community_kitchen"]).toContain(n.type);
     }
   });
 

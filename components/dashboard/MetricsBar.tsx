@@ -33,6 +33,7 @@ export default function MetricsBar() {
       <Kpi label="Delivered" value={String(m.delivered)} icon="📦" />
       <Kpi label="Spoiled" value={String(m.spoiled)} accent={m.spoiled > 0 ? "text-twin-danger text-glow animate-pulse-slow" : undefined} icon="⚠️" />
       <Kpi label="Food saved" value={m.foodSavedPct == null ? "—" : `${m.foodSavedPct.toFixed(0)}%`} accent="text-twin-emerald text-glow" icon="🌱" />
+      <Kpi label="Diverted" value={`${m.foodDivertedKg} kg`} accent={m.foodDivertedKg > 0 ? "text-orange-400 text-glow" : undefined} icon="🍳" />
       <Kpi label="CO₂" value={`${m.co2Kg.toFixed(1)} kg`} icon="💨" />
       <Kpi label="Cost" value={`₹${m.costRupees.toFixed(0)}`} icon="💰" />
       <Kpi label="Reputation" value={`${m.reputation.toFixed(0)}`} accent={repColor(m.reputation) + " text-glow"} icon="⭐" />

@@ -14,7 +14,7 @@
 import type { ProduceId } from "../engine/types";
 import { EDGE_PATHS } from "./edgePaths";
 
-export type NodeType = "source" | "hub" | "retail";
+export type NodeType = "source" | "hub" | "retail" | "urban_farm" | "community_kitchen";
 
 export interface Refrigeration {
   /** Cold-room setpoint, °C. */
@@ -37,6 +37,14 @@ export interface CityNode {
   /** Produce this node injects into the network (source nodes only). */
   handles?: ProduceId[];
   description: string;
+  // --- Urban Farm properties ---
+  localProductionCapacity?: number; // kg per day
+  produceTypes?: ProduceId[]; // what they grow
+  supplyRadiusKm?: number; // which retail zones they can serve directly
+  heatIslandFactor?: number; // 0.0-1.0, how much cooler vs city baseline
+  // --- Community Kitchen properties ---
+  acceptedQualityMin?: number; // accepts batches with quality >= this value
+  capacityKg?: number; // max intake per day
 }
 
 export interface CityEdge {
@@ -428,6 +436,108 @@ export const CHENNAI_NODES: CityNode[] = [
     refrigeration: null,
     description: "Fast-growing western residential area.",
   },
+
+  // ── Urban Farms (local production) ────────────────────────────────────────
+  {
+    id: "farm-adyar-eco",
+    name: "Adyar Eco Park Urban Farm",
+    type: "urban_farm",
+    coordinates: [80.2565, 13.0012],
+    ambientOffsetC: -1.0, // green cover
+    refrigeration: null,
+    description: "Community farm providing local produce.",
+    localProductionCapacity: 150,
+    produceTypes: ["leafyVeg", "tomato"],
+    supplyRadiusKm: 3.5,
+    heatIslandFactor: 0.8,
+  },
+  {
+    id: "farm-anna-nagar",
+    name: "Anna Nagar Rooftop Cluster",
+    type: "urban_farm",
+    coordinates: [80.2101, 13.0878],
+    ambientOffsetC: -0.5,
+    refrigeration: null,
+    description: "Network of commercial rooftop hydroponic setups.",
+    localProductionCapacity: 200,
+    produceTypes: ["leafyVeg"],
+    supplyRadiusKm: 2.0,
+    heatIslandFactor: 0.9,
+  },
+  {
+    id: "farm-velachery",
+    name: "Velachery Community Garden",
+    type: "urban_farm",
+    coordinates: [80.2180, 12.9815],
+    ambientOffsetC: -0.5,
+    refrigeration: null,
+    description: "Neighborhood garden supplying nearby markets.",
+    localProductionCapacity: 100,
+    produceTypes: ["tomato", "leafyVeg"],
+    supplyRadiusKm: 2.5,
+    heatIslandFactor: 0.85,
+  },
+  {
+    id: "farm-mylapore",
+    name: "Mylapore Terrace Farm Network",
+    type: "urban_farm",
+    coordinates: [80.2676, 13.0368],
+    ambientOffsetC: -0.2,
+    refrigeration: null,
+    description: "Scattered terrace micro-farms aggregated for retail.",
+    localProductionCapacity: 80,
+    produceTypes: ["leafyVeg"],
+    supplyRadiusKm: 1.5,
+    heatIslandFactor: 0.95,
+  },
+  {
+    id: "farm-koramangala",
+    name: "Koramangala Kitchen Garden",
+    type: "urban_farm",
+    coordinates: [80.2350, 13.0700],
+    ambientOffsetC: -0.8,
+    refrigeration: null,
+    description: "Urban garden focused on high-yield perishables.",
+    localProductionCapacity: 120,
+    produceTypes: ["leafyVeg", "tomato"],
+    supplyRadiusKm: 2.0,
+    heatIslandFactor: 0.85,
+  },
+
+  // ── Community Kitchens (food diversion) ──────────────────────────────────
+  {
+    id: "kitchen-sowcarpet",
+    name: "Sowcarpet Community Kitchen",
+    type: "community_kitchen",
+    coordinates: [80.2785, 13.0878],
+    ambientOffsetC: 0.0,
+    refrigeration: null,
+    description: "Mass kitchen accepting near-spoiled food to feed the needy.",
+    acceptedQualityMin: 25,
+    capacityKg: 500,
+  },
+  {
+    id: "kitchen-adyar",
+    name: "Adyar Food Bank",
+    type: "community_kitchen",
+    coordinates: [80.2534, 13.0012],
+    ambientOffsetC: -0.2,
+    refrigeration: { setpointC: 8 }, // Basic holding fridge
+    description: "Food bank acting as a clearinghouse for edible waste.",
+    acceptedQualityMin: 25,
+    capacityKg: 1000,
+  },
+  {
+    id: "kitchen-tnagar",
+    name: "T. Nagar Redistribution Hub",
+    type: "community_kitchen",
+    coordinates: [80.2341, 13.0401],
+    ambientOffsetC: 0.5,
+    refrigeration: null,
+    description: "Central redistribution point saving retail overstock.",
+    acceptedQualityMin: 25,
+    capacityKg: 800,
+  }
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

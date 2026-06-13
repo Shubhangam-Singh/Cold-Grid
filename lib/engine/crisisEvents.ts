@@ -27,7 +27,8 @@ export type CrisisEffect =
   | { type: "wait"; delayMinutes: number }
   | { type: "reefer_off" }
   | { type: "push_through"; speedPenalty: number }
-  | { type: "divert_to_hub"; hubId: string; hubName: string; newEdgeIds: string[] };
+  | { type: "divert_to_hub"; hubId: string; hubName: string; newEdgeIds: string[] }
+  | { type: "divert_kitchen"; kitchenId: string; kitchenName: string; newEdgeIds: string[] };
 
 export interface CrisisEvent {
   id: string;
@@ -110,6 +111,41 @@ function findNearestHub(
   return best ? { hubId: best.hubId, hubName: best.hubName, route: best.route } : null;
 }
 
+/**
+ * Find the nearest community kitchen that accepts the batch quality.
+ */
+function findNearestKitchen(
+  currentEdgeId: string,
+  batchQuality: number,
+  closedEdgeIds: string[]
+): { kitchenId: string; kitchenName: string; route: string[] } | null {
+  const edge = getEdge(currentEdgeId);
+  const fromNodeId = edge.from;
+  const fromNode = getNode(fromNodeId);
+
+  const kitchens = CHENNAI_NODES.filter(
+    (n) => n.type === "community_kitchen" && (n.acceptedQualityMin == null || batchQuality >= n.acceptedQualityMin)
+  );
+
+  let best: { kitchenId: string; kitchenName: string; route: string[]; dist: number } | null = null;
+
+  for (const kitchen of kitchens) {
+    const route = planRoute(fromNodeId, kitchen.id, { closedEdgeIds });
+    if (!route || route.length === 0) continue;
+
+    const dist = haversineKm(fromNode.coordinates, kitchen.coordinates);
+    if (!best || dist < best.dist) {
+      best = { kitchenId: kitchen.id, kitchenName: kitchen.name, route, dist };
+    }
+  }
+
+  // Only return if it's within 5km as per spec
+  if (best && best.dist <= 5) {
+    return { kitchenId: best.kitchenId, kitchenName: best.kitchenName, route: best.route };
+  }
+  return null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Deterministic crisis generation
 // ─────────────────────────────────────────────────────────────────────────────
@@ -160,7 +196,8 @@ export function generateCrisisOptions(
   shipmentId: string,
   currentEdgeId: string,
   destinationId: string,
-  closedEdgeIds: string[]
+  closedEdgeIds: string[],
+  batchQuality: number
 ): CrisisOption[] {
   const edge = getEdge(currentEdgeId);
   const options: CrisisOption[] = [];
@@ -278,6 +315,24 @@ export function generateCrisisOptions(
     }
   }
 
+  // Common option for all crises: Divert to Community Kitchen if quality is 25-55
+  if (batchQuality >= 25 && batchQuality <= 55) {
+    const kitchen = findNearestKitchen(currentEdgeId, batchQuality, closedEdgeIds);
+    if (kitchen) {
+      options.push({
+        id: "divert_kitchen",
+        label: `Divert to Community Kitchen 🍳`,
+        description: `Batch quality too low for retail. Redirect to ${kitchen.kitchenName}. Food saved from waste. +15 community points. No quality penalty.`,
+        effect: {
+          type: "divert_kitchen",
+          kitchenId: kitchen.kitchenId,
+          kitchenName: kitchen.kitchenName,
+          newEdgeIds: kitchen.route,
+        },
+      });
+    }
+  }
+
   return options;
 }
 
@@ -290,7 +345,8 @@ export function createCrisis(
   edgeId: string,
   destinationId: string,
   tick: number,
-  closedEdgeIds: string[]
+  closedEdgeIds: string[],
+  batchQuality: number
 ): CrisisEvent {
   const meta = CRISIS_META[crisisType];
   return {
@@ -304,6 +360,6 @@ export function createCrisis(
     triggerTick: tick,
     resolved: false,
     chosenOptionId: null,
-    options: generateCrisisOptions(crisisType, shipmentId, edgeId, destinationId, closedEdgeIds),
+    options: generateCrisisOptions(crisisType, shipmentId, edgeId, destinationId, closedEdgeIds, batchQuality),
   };
 }

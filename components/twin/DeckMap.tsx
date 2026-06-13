@@ -17,6 +17,7 @@ import { WebMercatorViewport } from "@deck.gl/core";
 import { Map } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import TruckMarker from "./TruckMarker";
+import { getUrbanFarmLayers } from "./UrbanFarmLayer";
 
 import {
   type CityEdge,
@@ -114,7 +115,9 @@ function nodeTooltipHtml(node: CityNode, tempC: number): string {
       1
     )}°C</span></div>
     <div style="color:#94a3b8;font-size:11px">${fridge}</div>
-    ${produceBlock}`;
+    ${produceBlock}
+    ${node.type === "urban_farm" && node.localProductionCapacity ? `<div style="margin-top:6px;color:#22c55e;font-size:11px">Local Production: ${node.localProductionCapacity} kg/day</div><div style="color:#64748b;font-size:11px">Supply Radius: ${node.supplyRadiusKm} km</div>` : ''}
+    ${node.type === "community_kitchen" && node.capacityKg ? `<div style="margin-top:6px;color:#f97316;font-size:11px">Capacity: ${node.capacityKg} kg/day</div><div style="color:#64748b;font-size:11px">Accepts quality ≥ ${node.acceptedQualityMin}</div>` : ''}`;
 }
 
 
@@ -470,9 +473,13 @@ export default function DeckMap() {
       currentTime: time,
       capRounded: true,
       jointRounded: true,
+      pickable: false,
     });
 
+    const urbanFarmLayers = getUrbanFarmLayers(nodes, time, hourOfDay, scenarioOffsetC);
+
     const base = [
+      ...urbanFarmLayers,
       roadLayer, trafficLayer,
       floodedLayer, floodWarningLayer,
       blockedLayer, blockedWarningLayer,

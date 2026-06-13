@@ -16,6 +16,7 @@ import ShipmentDecayModal from "./ShipmentDecayModal";
 import DemoMode from "./DemoMode";
 import CopilotPanel from "@/components/learning/CopilotPanel";
 import RouteSelectionModal from "./RouteSelectionModal";
+import FarmImpactPanel from "./FarmImpactPanel";
 import DecisionDialog from "@/components/academy/DecisionDialog";
 import WeatherWidget from "./WeatherWidget";
 import TrackingCard from "./TrackingCard";
@@ -41,14 +42,17 @@ export default function TwinScreen() {
         <MapLegend />
       </div>
 
-      <div className="absolute right-6 top-6 z-10 flex flex-col gap-4 pointer-events-none">
-        <div className="pointer-events-auto">
+      <div className="absolute right-6 top-6 bottom-10 z-10 flex flex-col gap-4 pointer-events-none overflow-y-auto overflow-x-hidden w-[350px] pr-2 pb-4 items-end custom-scrollbar">
+        <div className="pointer-events-auto shrink-0 w-full flex justify-end">
           <CityClock />
         </div>
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto shrink-0 w-full flex justify-end">
           <WeatherWidget />
         </div>
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto shrink-0 w-full flex justify-end">
+          <FarmImpactPanel />
+        </div>
+        <div className="pointer-events-auto shrink-0 w-full flex justify-end">
           <ShipmentPanel />
         </div>
       </div>

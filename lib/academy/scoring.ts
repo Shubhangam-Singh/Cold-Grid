@@ -34,6 +34,8 @@ export interface ScenarioScore {
   overBudget: boolean;
   costRupees: number;
   co2Kg: number;
+  communityImpactPoints: number;
+  foodSavedKg: number;
   composite: number;
   stars: Stars;
   breakdown: { food: number; onTime: number; efficiency: number; budgetPenalty: number };
@@ -65,7 +67,12 @@ export function scoreScenario(scenario: Scenario, results: DeliveryResult[]): Sc
   const food = W_FOOD * foodSavedPct;
   const onTime = W_ONTIME * onTimePct;
   const eff = W_EFFICIENCY * efficiency;
-  const composite = clamp(food + onTime + eff - budgetPenalty, 0, 100);
+
+  const divertedDeliveries = results.filter(r => r.diverted);
+  const communityImpactPoints = divertedDeliveries.length * 15;
+  const foodSavedKg = divertedDeliveries.length * 1500;
+
+  const composite = clamp(food + onTime + eff - budgetPenalty + communityImpactPoints, 0, 100);
 
   const stars: Stars =
     composite >= scenario.targets.threeStar ? 3 : composite >= scenario.targets.twoStar ? 2 : 1;
@@ -78,6 +85,8 @@ export function scoreScenario(scenario: Scenario, results: DeliveryResult[]): Sc
     overBudget,
     costRupees,
     co2Kg,
+    communityImpactPoints,
+    foodSavedKg,
     composite,
     stars,
     breakdown: { food, onTime, efficiency: eff, budgetPenalty },

@@ -17,6 +17,7 @@ export default function CertificateScreen() {
   const backToSelect = useAcademyStore((s) => s.backToSelect);
 
   const totalStars = Object.values(completed).reduce((s, c) => s + c.stars, 0);
+  const totalFoodDiverted = Object.values(completed).reduce((s, c) => s + (c.foodSavedKg || 0), 0);
   const cert = certificationLevel(totalStars, SCENARIOS.length);
   const delta = preScore != null && postScore != null ? postScore - preScore : null;
 
@@ -71,6 +72,14 @@ export default function CertificateScreen() {
             );
           })}
         </div>
+
+        {totalFoodDiverted >= 3000 && (
+          <div className="mt-5 rounded-xl border border-twin-emerald/30 bg-twin-emerald/10 p-3 text-center">
+            <div className="text-2xl mb-1">🌱</div>
+            <div className="font-bold text-twin-emerald">Zero Waste Operator</div>
+            <div className="text-xs text-slate-400 mt-1">You diverted {totalFoodDiverted} kg of near-spoiled food to community kitchens!</div>
+          </div>
+        )}
 
         <button
           onClick={backToSelect}
