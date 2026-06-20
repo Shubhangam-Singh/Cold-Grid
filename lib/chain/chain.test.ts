@@ -8,6 +8,7 @@ import {
 import { appendAttestation, buildChain, tamperReportedTemp, verifyChain } from "./ledger";
 import { settle } from "./escrow";
 import { DEMO_TERMS, buildTrustArc, sampleShipmentHistory } from "./arc";
+import { settlementImpact } from "./impact";
 import type { TempAttestation } from "./types";
 
 const history = sampleShipmentHistory("fish");
@@ -105,5 +106,21 @@ describe("trust arc", () => {
 
   it("is deterministic", () => {
     expect(buildTrustArc({})).toEqual(buildTrustArc({}));
+  });
+});
+
+describe("equity impact translation", () => {
+  it("translates the protected/lost rupees into food + meals with a note", () => {
+    const arc = buildTrustArc({});
+    const onChain = settlementImpact(arc[2].settlement, "fish");
+    expect(onChain.rupees).toBe(arc[2].settlement.withheldRupees);
+    expect(onChain.cargoKg).toBeGreaterThan(0);
+    expect(onChain.meals).toBeGreaterThan(0);
+    expect(onChain.note).toMatch(/meals/);
+
+    // The off-chain fraud stage surfaces the full payout as the loss.
+    const fraud = settlementImpact(arc[1].settlement, "fish");
+    expect(fraud.rupees).toBe(arc[1].settlement.payoutRupees);
+    expect(fraud.note).toMatch(/cost the buyer/);
   });
 });

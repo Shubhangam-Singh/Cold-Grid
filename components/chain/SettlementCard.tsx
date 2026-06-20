@@ -2,7 +2,7 @@
 
 /** Shows how a ComplianceEscrow settlement resolved — payout, fraud, integrity. */
 
-import type { EscrowTerms, Settlement } from "@/lib/chain";
+import { type EscrowTerms, type Settlement, settlementImpact } from "@/lib/chain";
 
 export default function SettlementCard({
   settlement: s,
@@ -55,6 +55,17 @@ export default function SettlementCard({
       </div>
 
       <p className="mt-3 text-xs leading-relaxed text-slate-400">{s.explanation}</p>
+
+      {(() => {
+        const impact = settlementImpact(s, terms.produce);
+        if (!impact.note) return null;
+        return (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-white/5 bg-slate-950/40 p-2.5">
+            <span className="text-base leading-none">🍽️</span>
+            <p className="text-[11px] leading-relaxed text-slate-300">{impact.note}</p>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -8,5 +8,6 @@ export * from "./hash";
 export * from "./ledger";
 export * from "./attestation";
 export * from "./escrow";
+export * from "./impact";
 export * from "./arc";
 export * from "./onchain";
