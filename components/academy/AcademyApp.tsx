@@ -90,16 +90,16 @@ export default function AcademyApp() {
 
   return (
     <main className="flex h-screen flex-col bg-[#07090d]">
-      <header className="relative z-50 flex items-center justify-between px-6 py-4 glass-panel border-b-0 shadow-none bg-transparent">
-        <div className="flex items-baseline gap-3">
-          <Link href="/" className="text-xl font-bold tracking-tight text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)] transition hover:text-twin-cyan">
+      <header className="relative z-50 flex items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-4 glass-panel border-b-0 shadow-none bg-transparent">
+        <div className="flex shrink-0 items-baseline gap-2 sm:gap-3">
+          <Link href="/" className="text-lg sm:text-xl font-bold tracking-tight text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)] transition hover:text-twin-cyan">
             ColdGrid
           </Link>
           <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-twin-amber text-glow animate-pulse-slow">
             Academy
           </span>
         </div>
-        <Link href="/" className="group relative overflow-hidden rounded-md border border-twin-cyan/40 bg-twin-cyan/10 px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-twin-cyan transition-all duration-300 hover:scale-105 hover:bg-twin-cyan/20 hover:shadow-[0_0_15px_rgba(0,240,255,0.3)]">
+        <Link href="/" className="group relative shrink-0 overflow-hidden rounded-md border border-twin-cyan/40 bg-twin-cyan/10 px-2.5 sm:px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-twin-cyan transition-all duration-300 hover:scale-105 hover:bg-twin-cyan/20 hover:shadow-[0_0_15px_rgba(0,240,255,0.3)]">
           <span className="relative z-10">Live Twin →</span>
           <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-twin-cyan/20 to-transparent group-hover:animate-[shimmer_1.5s_infinite]"></div>
         </Link>

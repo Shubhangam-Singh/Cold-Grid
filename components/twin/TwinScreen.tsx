@@ -20,6 +20,7 @@ import FarmImpactPanel from "./FarmImpactPanel";
 import DecisionDialog from "@/components/academy/DecisionDialog";
 import WeatherWidget from "./WeatherWidget";
 import TrackingCard from "./TrackingCard";
+import MobileControlDock from "./MobileControlDock";
 
 const DeckMap = dynamic(() => import("./DeckMap"), {
   ssr: false,
@@ -37,12 +38,14 @@ export default function TwinScreen() {
     <div className="relative h-full w-full overflow-hidden">
       <DeckMap />
       <SimulationClock />
-      <div className="absolute left-6 top-6 bottom-6 z-20 flex flex-col justify-between gap-4 pointer-events-none w-72">
+      {/* Desktop side columns — hidden on phones/tablets; the MobileControlDock
+          surfaces these same panels in a drawer below the lg breakpoint. */}
+      <div className="absolute left-6 top-6 bottom-6 z-20 hidden lg:flex flex-col justify-between gap-4 pointer-events-none w-72">
         <SimControls />
         <MapLegend />
       </div>
 
-      <div className="absolute right-6 top-6 bottom-10 z-10 flex flex-col gap-4 pointer-events-none overflow-y-auto overflow-x-hidden w-[350px] pr-2 pb-4 items-end custom-scrollbar">
+      <div className="absolute right-6 top-6 bottom-10 z-10 hidden lg:flex flex-col gap-4 pointer-events-none overflow-y-auto overflow-x-hidden w-[350px] pr-2 pb-4 items-end custom-scrollbar">
         <div className="pointer-events-auto shrink-0 w-full flex justify-end">
           <CityClock />
         </div>
@@ -57,6 +60,7 @@ export default function TwinScreen() {
         </div>
       </div>
 
+      <MobileControlDock />
       <CopilotPanel />
       <DemoMode />
       <ShipmentDecayModal />

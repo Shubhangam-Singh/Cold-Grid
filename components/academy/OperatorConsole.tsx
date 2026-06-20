@@ -45,7 +45,7 @@ export default function OperatorConsole() {
   return (
     <>
       {/* Left: deliveries + controls */}
-      <div className="absolute left-4 top-4 z-10 max-h-[calc(100vh-7rem)] w-80 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/90 p-3 backdrop-blur">
+      <div className="absolute left-3 top-3 sm:left-4 sm:top-4 z-10 max-h-[50vh] sm:max-h-[calc(100vh-7rem)] w-[calc(100vw-1.5rem)] max-w-[20rem] sm:w-80 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/90 p-3 backdrop-blur">
         <div className="flex items-center justify-between">
           <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-sky-400">
             Scenario {scenario.index} · Operate
@@ -152,8 +152,9 @@ export default function OperatorConsole() {
         <ComparatorModal />
       </div>
 
-      {/* Right: live projected outcome */}
-      <div className="absolute right-4 top-4 z-10 w-64 rounded-lg border border-slate-800 bg-slate-950/90 p-3 backdrop-blur">
+      {/* Right: live projected outcome (docks to the bottom on mobile so it
+          doesn't overlap the controls panel) */}
+      <div className="absolute left-3 right-3 bottom-3 sm:left-auto sm:right-4 sm:top-4 sm:bottom-auto z-10 w-auto sm:w-64 max-h-[42vh] overflow-y-auto sm:max-h-none rounded-lg border border-slate-800 bg-slate-950/90 p-3 backdrop-blur">
         <div className="flex items-center justify-between">
           <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
             Projected

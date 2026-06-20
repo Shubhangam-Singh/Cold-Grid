@@ -58,8 +58,8 @@ export default function ComparatorModal() {
       </button>
 
       {mounted && isOpen && strategyB && scoreB && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md">
-          <div className="w-[900px] max-h-[90vh] overflow-y-auto rounded-2xl glass-panel p-8 shadow-2xl flex flex-col relative">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="w-full max-w-[900px] max-h-[90vh] overflow-y-auto rounded-2xl glass-panel p-5 sm:p-8 shadow-2xl flex flex-col relative">
             <button 
               onClick={() => setIsOpen(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-white font-mono text-xs uppercase"

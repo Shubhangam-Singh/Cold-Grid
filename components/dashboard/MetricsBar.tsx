@@ -27,7 +27,7 @@ export default function MetricsBar() {
   const m = useMemo(() => fleetMetrics(shipments), [shipments]);
 
   return (
-    <div className="relative z-40 flex flex-wrap items-center justify-center gap-x-4 gap-y-3 bg-gradient-to-b from-slate-900/60 to-transparent px-5 py-3 shadow-[0_4px_30px_rgba(0,0,0,0.3)] backdrop-blur-sm border-b border-white/5">
+    <div className="relative z-40 flex flex-nowrap items-center justify-start gap-3 overflow-x-auto no-scrollbar px-3 py-2 lg:flex-wrap lg:justify-center lg:gap-x-4 lg:gap-y-3 lg:px-5 lg:py-3 bg-gradient-to-b from-slate-900/60 to-transparent shadow-[0_4px_30px_rgba(0,0,0,0.3)] backdrop-blur-sm border-b border-white/5">
       <Kpi label="Clock" value={formatHour(hourOfDay)} icon="⏱" />
       <Kpi label="In transit" value={String(m.inTransit)} accent="text-twin-cyan text-glow" icon="🚚" />
       <Kpi label="Delivered" value={String(m.delivered)} icon="📦" />
@@ -43,7 +43,7 @@ export default function MetricsBar() {
 
 function Kpi({ label, value, accent, icon }: { label: string; value: string; accent?: string; icon?: string }) {
   return (
-    <div className="glass-pill flex items-center gap-2 px-3 py-1.5 transition-transform duration-300 hover:scale-105 hover:bg-slate-800/60 hover:shadow-[0_0_15px_rgba(0,240,255,0.15)]">
+    <div className="glass-pill flex shrink-0 items-center gap-2 px-3 py-1.5 transition-transform duration-300 hover:scale-105 hover:bg-slate-800/60 hover:shadow-[0_0_15px_rgba(0,240,255,0.15)]">
       {icon && <span className="text-xs opacity-70">{icon}</span>}
       <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-slate-400">{label}</span>
       <span className={`font-mono text-sm font-bold ${accent ?? "text-white"}`}>{value}</span>

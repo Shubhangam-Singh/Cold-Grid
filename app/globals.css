@@ -94,3 +94,27 @@ body {
   background-color: rgba(255, 255, 255, 0.2);
 }
 
+/* ─── Mobile helpers ─────────────────────────────────────────────────────── */
+
+/* Hide scrollbar but keep scrolling (used by the mobile KPI strip). */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Respect the iOS/Android safe-area so bottom UI clears the home indicator. */
+.safe-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@keyframes drawer-in {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+.animate-drawer-in {
+  animation: drawer-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+

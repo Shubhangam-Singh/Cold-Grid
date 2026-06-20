@@ -61,8 +61,8 @@ export default function RouteSelectionModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-[680px] max-h-[85vh] overflow-y-auto rounded-2xl glass-panel p-6 shadow-[0_0_60px_rgba(0,0,0,0.6)]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="relative w-full max-w-[680px] max-h-[85vh] overflow-y-auto rounded-2xl glass-panel p-5 sm:p-6 shadow-[0_0_60px_rgba(0,0,0,0.6)]">
         {/* Top accent line */}
         <div className="absolute top-0 left-1/2 h-px w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-twin-cyan/50 to-transparent" />
 

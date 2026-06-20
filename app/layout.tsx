@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -16,6 +16,14 @@ export const metadata: Metadata = {
   title: "ColdGrid — Chennai Cold-Chain Digital Twin",
   description:
     "A digital twin of Chennai's perishable-food cold chain with an operator training academy, powered by the patented PPSC Adaptive Arrhenius + EMA spoilage engine.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Keep pinch-zoom available (accessibility) — don't lock maximumScale.
+  themeColor: "#07090d",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({

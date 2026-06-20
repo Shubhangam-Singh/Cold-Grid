@@ -20,7 +20,7 @@ export default function CrisisAlert() {
   if (unresolvedCrises.length === 0) return null;
 
   return (
-    <div className="absolute top-20 left-1/2 z-40 -translate-x-1/2 flex flex-col gap-3 w-[420px]">
+    <div className="absolute top-20 left-1/2 z-40 -translate-x-1/2 flex flex-col gap-3 w-[min(420px,calc(100vw-1.5rem))]">
       {unresolvedCrises.map((crisis) => {
         const shipment = shipments.find((s) => s.id === crisis.shipmentId);
         if (!shipment) return null;
