@@ -13,7 +13,7 @@
  * - REROUTING: brief 180° spin animation before following new route
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { WebMercatorViewport } from "@deck.gl/core";
 import type { Shipment } from "@/lib/engine/simulation";
@@ -220,6 +220,7 @@ export default function TruckMarker({ shipment, viewportRef }: Props) {
               selected={selected}
               halted={isFrozen}
               awaiting={truckState === "AWAITING_COMMAND"}
+              accent={qColor}
             />
           </motion.div>
 
@@ -283,45 +284,108 @@ export default function TruckMarker({ shipment, viewportRef }: Props) {
   );
 }
 
-/** Clean top-down delivery truck, pointing UP (north) at rotation 0. */
+/**
+ * App-style 3D-look delivery truck, top-down, pointing UP (north) at rotation 0.
+ * Gradient shading + wheels + glossy windshield + headlight glow give it depth
+ * while staying a top-down icon so it rotates correctly with heading.
+ */
 function TruckSvg({
   selected,
   halted,
   awaiting,
+  accent,
 }: {
   selected: boolean;
   halted: boolean;
   awaiting: boolean;
+  accent: string;
 }) {
-  const strokeColor = awaiting ? "#f59e0b" : selected ? "#00f0ff" : "#1e293b";
-  const strokeW = awaiting || selected ? 2.2 : 1.6;
-  const bodyFill = halted ? "#cbd5e1" : "#f8fafc";
+  // Unique gradient ids per instance so many trucks don't share one definition.
+  const raw = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const body = `tb${raw}`;
+  const cab = `tc${raw}`;
+  const glass = `tg${raw}`;
+  const head = `th${raw}`;
+
+  const stroke = awaiting ? "#f59e0b" : selected ? "#00e0ff" : "#0b1220";
+  const strokeW = awaiting || selected ? 1.6 : 1.1;
+  const stripe = halted ? "#64748b" : accent;
+  const headlight = halted ? "#94a3b8" : "#fff7d6";
 
   return (
     <svg
       viewBox="0 0 32 44"
       width="32"
       height="44"
-      style={{ filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.55))" }}
+      style={{ filter: "drop-shadow(0 3px 4px rgba(0,0,0,0.5))" }}
     >
-      {/* cargo body */}
-      <rect x="4" y="14" width="24" height="28" rx="3.5" fill={bodyFill} stroke={strokeColor} strokeWidth={strokeW} />
-      {/* cab (front) */}
-      <path d="M6 15 C6 5.5, 26 5.5, 26 15 Z" fill="#e2e8f0" stroke={strokeColor} strokeWidth="1.4" />
-      {/* windshield */}
-      <path d="M9.5 12.5 C9.5 8.5, 22.5 8.5, 22.5 12.5 Z" fill="#0f172a" />
-      {/* roof ribs */}
-      <line x1="5" y1="22" x2="27" y2="22" stroke="#cbd5e1" strokeWidth="0.9" />
-      <line x1="5" y1="29" x2="27" y2="29" stroke="#cbd5e1" strokeWidth="0.9" />
-      <line x1="5" y1="36" x2="27" y2="36" stroke="#cbd5e1" strokeWidth="0.9" />
-      {/* headlights */}
-      <circle cx="10" cy="7.5" r="1.3" fill={halted ? "#94a3b8" : "#fde68a"} />
-      <circle cx="22" cy="7.5" r="1.3" fill={halted ? "#94a3b8" : "#fde68a"} />
+      <defs>
+        <linearGradient id={body} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor={halted ? "#94a3b8" : "#c7d2e0"} />
+          <stop offset="0.18" stopColor={halted ? "#e2e8f0" : "#ffffff"} />
+          <stop offset="0.5" stopColor={halted ? "#cbd5e1" : "#f1f5f9"} />
+          <stop offset="0.82" stopColor={halted ? "#e2e8f0" : "#ffffff"} />
+          <stop offset="1" stopColor={halted ? "#94a3b8" : "#c7d2e0"} />
+        </linearGradient>
+        <linearGradient id={cab} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor="#aab6c6" />
+          <stop offset="0.5" stopColor={halted ? "#e2e8f0" : "#fbfdff"} />
+          <stop offset="1" stopColor="#aab6c6" />
+        </linearGradient>
+        <linearGradient id={glass} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#5b708f" />
+          <stop offset="0.45" stopColor="#1e2b3d" />
+          <stop offset="1" stopColor="#0a1424" />
+        </linearGradient>
+        <radialGradient id={head}>
+          <stop offset="0" stopColor={headlight} />
+          <stop offset="1" stopColor={headlight} stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      {/* ── wheels (peek out from under the body) ── */}
+      <g fill="#0a101c">
+        <rect x="2" y="17" width="4" height="7" rx="2" />
+        <rect x="26" y="17" width="4" height="7" rx="2" />
+        <rect x="2" y="32" width="4" height="8" rx="2" />
+        <rect x="26" y="32" width="4" height="8" rx="2" />
+      </g>
+
+      {/* ── cab / nose (front) ── */}
+      <path
+        d="M7 14 L7 9.5 Q7 4 16 4 Q25 4 25 9.5 L25 14 Z"
+        fill={`url(#${cab})`}
+        stroke={stroke}
+        strokeWidth={strokeW}
+        strokeLinejoin="round"
+      />
+      {/* headlight glow + lamps at the front corners */}
+      <circle cx="9.5" cy="6" r="3" fill={`url(#${head})`} />
+      <circle cx="22.5" cy="6" r="3" fill={`url(#${head})`} />
+      <circle cx="9.5" cy="6" r="1.15" fill={headlight} />
+      <circle cx="22.5" cy="6" r="1.15" fill={headlight} />
+      {/* windshield (glossy) */}
+      <path d="M9 12.6 L9 10.4 Q16 8.2 23 10.4 L23 12.6 Z" fill={`url(#${glass})`} />
+      <path d="M10 10.8 Q16 9.2 22 10.8" stroke="#9fb6d4" strokeWidth="0.5" fill="none" opacity="0.5" />
+
+      {/* ── cargo box ── */}
+      <rect x="4.5" y="12.5" width="23" height="29.5" rx="4" fill={`url(#${body})`} stroke={stroke} strokeWidth={strokeW} />
+      {/* gloss highlight along the top edge */}
+      <rect x="7" y="14" width="18" height="3.2" rx="1.6" fill="#ffffff" opacity={halted ? 0.25 : 0.55} />
+      {/* roof accent stripe (cargo-quality colour) */}
+      <rect x="13" y="14" width="6" height="26" rx="3" fill={stripe} opacity={halted ? 0.5 : 0.9} />
+      {/* rear double-door seam */}
+      <line x1="16" y1="34" x2="16" y2="41.6" stroke="#9aa7b8" strokeWidth="0.7" opacity="0.8" />
+      <line x1="6" y1="34" x2="26" y2="34" stroke="#9aa7b8" strokeWidth="0.7" opacity="0.7" />
+      {/* side mirrors */}
+      <rect x="4.6" y="11" width="2" height="1.6" rx="0.8" fill="#64748b" />
+      <rect x="25.4" y="11" width="2" height="1.6" rx="0.8" fill="#64748b" />
+
       {/* amber hazard lights when halted */}
       {halted && (
         <>
-          <circle cx="6" cy="20" r="1.5" fill="#f59e0b" opacity="0.9" />
-          <circle cx="26" cy="20" r="1.5" fill="#f59e0b" opacity="0.9" />
+          <circle cx="5.5" cy="22" r="1.5" fill="#f59e0b" />
+          <circle cx="26.5" cy="22" r="1.5" fill="#f59e0b" />
         </>
       )}
     </svg>
