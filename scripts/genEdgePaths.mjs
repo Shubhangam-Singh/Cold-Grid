@@ -8,7 +8,7 @@
  * edge list in lib/city/chennai.ts change. Mirrors that data below.
  */
 
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 
 const NODES = {
   koyambedu: [80.194, 13.069],
@@ -26,6 +26,26 @@ const NODES = {
   sholinganallur: [80.227, 12.901],
   porur: [80.158, 13.036],
   "ennore-port": [80.323, 13.235],
+
+  // ── Regional expansion (Tamil Nadu satellite cities) ──────────────────────
+  "kanchipuram-mandi": [79.715, 12.828],
+  "hub-kanchipuram": [79.71, 12.831],
+  "kanchipuram-silk-market": [79.7036, 12.8342],
+  "vellore-agri": [79.15, 12.91],
+  "hub-vellore": [79.14, 12.92],
+  "vellore-cmc": [79.1325, 12.9165],
+  "vellore-fort": [79.132, 12.926],
+  "puducherry-harbour": [79.835, 11.928],
+  "auroville-farm": [79.81, 12.005],
+  "hub-puducherry": [79.825, 11.94],
+  "puducherry-main": [79.83, 11.934],
+  "mahabalipuram-fish": [80.199, 12.612],
+  "mahabalipuram-market": [80.193, 12.617],
+  "chengalpattu-wholesale": [79.965, 12.68],
+  "hub-chengalpattu": [79.97, 12.69],
+  "chengalpattu-market": [79.978, 12.685],
+  "hub-sriperumbudur": [79.94, 12.97],
+  "sriperumbudur-retail": [79.945, 12.965],
 };
 
 const EDGES = [
@@ -65,6 +85,42 @@ const EDGES = [
   ["adyar_sholinganallur", "adyar", "sholinganallur"],
   ["ambattur_porur", "hub-ambattur", "porur"],
   ["koyambedu_porur", "koyambedu", "porur"],
+
+  // ── Regional expansion edges ──────────────────────────────────────────────
+  ["guindy_chengalpattu_nh45", "hub-guindy", "hub-chengalpattu"],
+  ["guindy_chengalpattu_ecr", "hub-guindy", "hub-chengalpattu"],
+  ["ambattur_sriperumbudur", "hub-ambattur", "hub-sriperumbudur"],
+  ["koyambedu_sriperumbudur", "koyambedu", "hub-sriperumbudur"],
+  ["tambaram_chengalpattu", "tambaram", "hub-chengalpattu"],
+  ["sriperumbudur_kanchipuram", "hub-sriperumbudur", "hub-kanchipuram"],
+  ["sriperumbudur_vellore", "hub-sriperumbudur", "hub-vellore"],
+  ["kanchipuram_chengalpattu", "hub-kanchipuram", "hub-chengalpattu"],
+  ["chengalpattu_puducherry_ecr", "hub-chengalpattu", "hub-puducherry"],
+  ["chengalpattu_puducherry_nh45a", "hub-chengalpattu", "hub-puducherry"],
+  ["chengalpattu_mahabalipuram", "hub-chengalpattu", "mahabalipuram-market"],
+  ["chengalpattu_mahabalipuram_inland", "hub-chengalpattu", "mahabalipuram-market"],
+  ["chengalpattu_kanchipuram", "hub-chengalpattu", "hub-kanchipuram"],
+  ["kanchipuram_sriperumbudur", "hub-kanchipuram", "hub-sriperumbudur"],
+  ["vellore_sriperumbudur", "hub-vellore", "hub-sriperumbudur"],
+  ["puducherry_chengalpattu", "hub-puducherry", "hub-chengalpattu"],
+  ["chengalpattu_guindy", "hub-chengalpattu", "hub-guindy"],
+  ["kanchipuram_mandi_hub", "kanchipuram-mandi", "hub-kanchipuram"],
+  ["kanchipuram_hub_silk", "hub-kanchipuram", "kanchipuram-silk-market"],
+  ["kanchipuram_mandi_silk", "kanchipuram-mandi", "kanchipuram-silk-market"],
+  ["vellore_agri_hub", "vellore-agri", "hub-vellore"],
+  ["vellore_hub_cmc", "hub-vellore", "vellore-cmc"],
+  ["vellore_hub_fort", "hub-vellore", "vellore-fort"],
+  ["vellore_agri_cmc", "vellore-agri", "vellore-cmc"],
+  ["puducherry_harbour_hub", "puducherry-harbour", "hub-puducherry"],
+  ["auroville_puducherry_hub", "auroville-farm", "hub-puducherry"],
+  ["puducherry_hub_main", "hub-puducherry", "puducherry-main"],
+  ["puducherry_harbour_main", "puducherry-harbour", "puducherry-main"],
+  ["mahabalipuram_fish_market", "mahabalipuram-fish", "mahabalipuram-market"],
+  ["mahabalipuram_fish_chengalpattu", "mahabalipuram-fish", "hub-chengalpattu"],
+  ["chengalpattu_wholesale_hub", "chengalpattu-wholesale", "hub-chengalpattu"],
+  ["chengalpattu_hub_market", "hub-chengalpattu", "chengalpattu-market"],
+  ["chengalpattu_wholesale_market", "chengalpattu-wholesale", "chengalpattu-market"],
+  ["sriperumbudur_hub_retail", "hub-sriperumbudur", "sriperumbudur-retail"],
 ];
 
 // Edges that should take a visibly different road than their sibling "main".
@@ -75,10 +131,48 @@ const ALTERNATE_IDS = new Set([
   "koyambedu_tnagar_bypass",
   "kasimedu_mylapore_city",
   "perambur_tnagar_bypass",
-  "guindy_tambaram_bypass"
+  "guindy_tambaram_bypass",
+  // Regional siblings that should take a visibly different road than their main.
+  "guindy_chengalpattu_ecr",
+  "chengalpattu_puducherry_nh45a",
+  "chengalpattu_mahabalipuram_inland",
 ]);
 
 const round5 = (n) => Math.round(n * 1e5) / 1e5;
+
+// Ramer–Douglas–Peucker line simplification (epsilon in degrees, ~28 m). Drops
+// collinear points so long highway runs don't carry 1000+ redundant vertices —
+// visually identical at every app zoom, far smaller bundle.
+const SIMPLIFY_EPS = 0.00025;
+
+function perpDist(p, a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+  let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+
+function rdp(points, eps) {
+  if (points.length < 3) return points;
+  let dmax = 0;
+  let idx = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const d = perpDist(points[i], points[0], points[points.length - 1]);
+    if (d > dmax) {
+      dmax = d;
+      idx = i;
+    }
+  }
+  if (dmax > eps) {
+    const left = rdp(points.slice(0, idx + 1), eps);
+    const right = rdp(points.slice(idx), eps);
+    return left.slice(0, -1).concat(right);
+  }
+  return [points[0], points[points.length - 1]];
+}
 
 function dedupe(coords) {
   const out = [];
@@ -107,19 +201,58 @@ async function fetchPath(id, fromId, toId) {
   return { coords, km: route.distance / 1000, n: coords.length };
 }
 
+/** Load already-baked paths so existing edge geometry is preserved untouched. */
+async function loadExisting() {
+  try {
+    const txt = await readFile(new URL("../lib/city/edgePaths.ts", import.meta.url), "utf8");
+    const m = txt.match(/=\s*(\{[\s\S]*\})\s*;\s*$/);
+    return m ? JSON.parse(m[1]) : {};
+  } catch {
+    return {};
+  }
+}
+
 async function main() {
+  const prev = await loadExisting();
   const result = {};
+  let fetched = 0;
   for (const [id, from, to] of EDGES) {
-    try {
-      const { coords, km, n } = await fetchPath(id, from, to);
-      result[id] = coords;
-      console.log(`✓ ${id.padEnd(28)} ${n} pts, ${km.toFixed(2)} km`);
-    } catch (e) {
-      console.warn(`✗ ${id}: ${e.message} — falling back to straight line`);
-      result[id] = [NODES[from].map(round5), NODES[to].map(round5)];
+    // Reuse existing geometry; only fetch edges we haven't baked yet.
+    if (Array.isArray(prev[id]) && prev[id].length >= 2) {
+      result[id] = prev[id];
+      continue;
+    }
+    let ok = false;
+    for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
+      try {
+        const { coords, km, n } = await fetchPath(id, from, to);
+        result[id] = coords;
+        console.log(`✓ ${id.padEnd(34)} ${n} pts, ${km.toFixed(2)} km`);
+        ok = true;
+        fetched++;
+      } catch (e) {
+        if (attempt === 3) {
+          console.warn(`✗ ${id}: ${e.message} — falling back to straight line`);
+          result[id] = [NODES[from].map(round5), NODES[to].map(round5)];
+        } else {
+          await new Promise((r) => setTimeout(r, 600 * attempt));
+        }
+      }
     }
     await new Promise((r) => setTimeout(r, 250)); // be gentle on the demo server
   }
+  console.log(`\nReused ${EDGES.length - fetched} existing, fetched ${fetched} new.`);
+
+  // Simplify every path (RDP) to strip redundant collinear vertices.
+  let before = 0;
+  let after = 0;
+  for (const id of Object.keys(result)) {
+    before += result[id].length;
+    const s = dedupe(rdp(result[id], SIMPLIFY_EPS));
+    if (s.length >= 2) result[id] = s;
+    after += result[id].length;
+  }
+  console.log(`Simplified ${before} → ${after} total vertices.`);
 
   const body =
     `/**\n` +
