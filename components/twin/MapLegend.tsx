@@ -17,6 +17,8 @@ const RISK_RAMP = ["#1a9850", "#91cf60", "#d9ef8b", "#fee08b", "#fc8d59", "#d730
 export default function MapLegend() {
   const showHeatmap = useColdgridStore((s) => s.showHeatmap);
   const toggleHeatmap = useColdgridStore((s) => s.toggleHeatmap);
+  const showLabels = useColdgridStore((s) => s.showLabels);
+  const toggleLabels = useColdgridStore((s) => s.toggleLabels);
 
   return (
     <div className="pointer-events-none w-72 rounded-xl glass-panel p-4 animate-slide-up flex-shrink-0">
@@ -24,17 +26,31 @@ export default function MapLegend() {
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
           Legend
         </span>
-        <button
-          onClick={toggleHeatmap}
-          aria-pressed={showHeatmap}
-          className={`pointer-events-auto rounded-md px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-twin-cyan ${
-            showHeatmap
-              ? "bg-twin-danger/20 text-twin-danger"
-              : "bg-slate-800/60 text-slate-300 hover:bg-slate-700/60"
-          }`}
-        >
-          ◍ Risk {showHeatmap ? "on" : "off"}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={toggleLabels}
+            aria-pressed={showLabels}
+            title="Show or hide map location names"
+            className={`pointer-events-auto rounded-md px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-twin-cyan ${
+              showLabels
+                ? "bg-twin-cyan/20 text-twin-cyan"
+                : "bg-slate-800/60 text-slate-300 hover:bg-slate-700/60"
+            }`}
+          >
+            🏷 Labels {showLabels ? "on" : "off"}
+          </button>
+          <button
+            onClick={toggleHeatmap}
+            aria-pressed={showHeatmap}
+            className={`pointer-events-auto rounded-md px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-twin-cyan ${
+              showHeatmap
+                ? "bg-twin-danger/20 text-twin-danger"
+                : "bg-slate-800/60 text-slate-300 hover:bg-slate-700/60"
+            }`}
+          >
+            ◍ Risk {showHeatmap ? "on" : "off"}
+          </button>
+        </div>
       </div>
 
       {showHeatmap && (

@@ -117,6 +117,8 @@ export interface ColdgridState {
   selectedShipmentId: string | null;
   /** City-wide spoilage-risk heatmap overlay toggle. */
   showHeatmap: boolean;
+  /** Node-name labels on the map (off declutters the wider regional view). */
+  showLabels: boolean;
   /** Scripted Demo Mode is running. */
   demoActive: boolean;
 
@@ -167,6 +169,7 @@ export interface ColdgridState {
   setSelectedShipment: (id: string | null) => void;
   toggleHeatmap: () => void;
   setHeatmap: (on: boolean) => void;
+  toggleLabels: () => void;
   setDemoActive: (active: boolean) => void;
   resetToSeed: (seed: number, startHourOfDay?: number) => void;
 
@@ -221,6 +224,7 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   selectedNodeId: null,
   selectedShipmentId: null,
   showHeatmap: false,
+  showLabels: true,
   demoActive: false,
   pendingDispatch: null,
   weatherData: null,
@@ -421,6 +425,7 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   setSelectedShipment: (id) => set({ selectedShipmentId: id }),
   toggleHeatmap: () => set((s) => ({ showHeatmap: !s.showHeatmap })),
   setHeatmap: (on) => set({ showHeatmap: on }),
+  toggleLabels: () => set((s) => ({ showLabels: !s.showLabels })),
   setDemoActive: (active) => set({ demoActive: active }),
   resetToSeed: (seed, startHourOfDay) =>
     set({ sim: createSimulation(seed, { startHourOfDay }), isPlaying: false, ...TRUCK_STATE_RESET }),

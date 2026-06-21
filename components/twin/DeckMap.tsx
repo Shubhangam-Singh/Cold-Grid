@@ -137,6 +137,7 @@ export default function DeckMap() {
   const setSelectedNode = useColdgridStore((s) => s.setSelectedNode);
   const setSelectedShipment = useColdgridStore((s) => s.setSelectedShipment);
   const showHeatmap = useColdgridStore((s) => s.showHeatmap);
+  const showLabels = useColdgridStore((s) => s.showLabels);
   const blockedEdgeIds = useColdgridStore((s) => s.blockedEdgeIds);
   const reroutedShipments = useColdgridStore((s) => s.reroutedShipments);
 
@@ -488,7 +489,8 @@ export default function DeckMap() {
       blockedLayer, blockedWarningLayer,
       rerouteLayer,
       routeTraveled, routeAhead, routeTrips,
-      destPulseLayer, nodeLayer, labelLayer,
+      destPulseLayer, nodeLayer,
+      ...(showLabels ? [labelLayer] : []),
     ];
     return showHeatmap ? [heatLayer, ...base] : base;
     // tempOf closes over hourOfDay/scenarioOffsetC; listed below so layers rebuild.
@@ -499,6 +501,7 @@ export default function DeckMap() {
     routeData,
     riskData,
     showHeatmap,
+    showLabels,
     inTransit,
     hourOfDay,
     scenarioOffsetC,
