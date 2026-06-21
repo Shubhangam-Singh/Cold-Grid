@@ -41,10 +41,13 @@ import { NODE_TYPE_STYLE, qualityToRgb, rgbCss, tempToRgb } from "./colors";
 const CARTO_DARK =
   "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 
+// Regional frame: centered to take in Chennai (north) through Chengalpattu /
+// Mahabalipuram (south) with Kanchipuram, Sriperumbudur, Vellore and Puducherry
+// reachable by a short pan. (Was a Chennai-only 80.237/13.062 @ z10.9.)
 const INITIAL_VIEW_STATE = {
-  longitude: 80.237,
-  latitude: 13.062,
-  zoom: 10.9,
+  longitude: 79.95,
+  latitude: 12.6,
+  zoom: 8.3,
   pitch: 0,
   bearing: 0,
 };

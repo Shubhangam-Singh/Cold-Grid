@@ -63,11 +63,16 @@ export interface CityEdge {
   congestionProne: boolean;
 }
 
-/** Chennai bounding box (spec §6): all node coordinates must fall inside. */
+/**
+ * Regional bounding box: Chennai + the satellite-city expansion (Kanchipuram,
+ * Vellore, Puducherry, Mahabalipuram, Chengalpattu, Sriperumbudur). All node
+ * coordinates must fall inside. The original Chennai box (12.8–13.3 N,
+ * 80.1–80.35 E) is a strict subset, so existing nodes still validate.
+ */
 export const CHENNAI_BOUNDS = {
-  minLat: 12.8,
+  minLat: 11.9,
   maxLat: 13.3,
-  minLon: 80.1,
+  minLon: 79.1,
   maxLon: 80.35,
 } as const;
 
@@ -537,6 +542,192 @@ export const CHENNAI_NODES: CityNode[] = [
     description: "Central redistribution point saving retail overstock.",
     acceptedQualityMin: 25,
     capacityKg: 800,
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REGIONAL EXPANSION — Tamil Nadu satellite cities (appended; nothing above
+  // this line is modified). Sources → local hubs → local retail, bridged to the
+  // Chennai hubs by inter-city highway edges below.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── A. Kanchipuram (~72 km SW of Chennai) ─────────────────────────────────
+  {
+    id: "kanchipuram-mandi",
+    name: "Kanchipuram Agri Mandi",
+    type: "source",
+    coordinates: [79.715, 12.828],
+    ambientOffsetC: 1.0,
+    refrigeration: null,
+    handles: ["tomato", "mango", "banana", "leafyVeg"],
+    description: "Agricultural wholesale yard serving the western belt.",
+  },
+  {
+    id: "hub-kanchipuram",
+    name: "Kanchipuram Cold Hub",
+    type: "hub",
+    coordinates: [79.71, 12.831],
+    ambientOffsetC: 0.5,
+    refrigeration: { setpointC: 5 },
+    description: "Regional cold storage serving Kanchipuram district.",
+  },
+  {
+    id: "kanchipuram-silk-market",
+    name: "Kanchipuram Silk Market",
+    type: "retail",
+    coordinates: [79.7036, 12.8342],
+    ambientOffsetC: 1.5,
+    refrigeration: null,
+    description: "Historic temple-town market — high foot-traffic retail.",
+  },
+
+  // ── B. Vellore (~130 km west of Chennai) ──────────────────────────────────
+  {
+    id: "vellore-agri",
+    name: "Vellore Agri Yard",
+    type: "source",
+    coordinates: [79.15, 12.91],
+    ambientOffsetC: 1.0,
+    refrigeration: null,
+    handles: ["tomato", "mango", "leafyVeg", "banana"],
+    description: "Farm-gate aggregation centre for Vellore district.",
+  },
+  {
+    id: "hub-vellore",
+    name: "Vellore Cold Hub",
+    type: "hub",
+    coordinates: [79.14, 12.92],
+    ambientOffsetC: 0.5,
+    refrigeration: { setpointC: 4 },
+    description: "Industrial cold storage facility on NH46.",
+  },
+  {
+    id: "vellore-cmc",
+    name: "Vellore CMC Market",
+    type: "retail",
+    coordinates: [79.1325, 12.9165],
+    ambientOffsetC: 1.0,
+    refrigeration: null,
+    description: "Major retail zone near Christian Medical College.",
+  },
+  {
+    id: "vellore-fort",
+    name: "Vellore Fort Market",
+    type: "retail",
+    coordinates: [79.132, 12.926],
+    ambientOffsetC: 0.5,
+    refrigeration: null,
+    description: "Heritage market area near Vellore Fort.",
+  },
+
+  // ── C. Puducherry / Pondicherry (~150 km south of Chennai) ────────────────
+  {
+    id: "puducherry-harbour",
+    name: "Puducherry Fishing Harbour",
+    type: "source",
+    coordinates: [79.835, 11.928],
+    ambientOffsetC: -1.0,
+    refrigeration: null,
+    handles: ["fish"],
+    description: "Major fishing port on the Coromandel coast.",
+  },
+  {
+    id: "auroville-farm",
+    name: "Auroville Organic Farm",
+    type: "source",
+    coordinates: [79.81, 12.005],
+    ambientOffsetC: -0.5,
+    refrigeration: null,
+    handles: ["leafyVeg", "tomato"],
+    description: "Organic farming community — premium produce.",
+  },
+  {
+    id: "hub-puducherry",
+    name: "Puducherry Cold Hub",
+    type: "hub",
+    coordinates: [79.825, 11.94],
+    ambientOffsetC: 0.0,
+    refrigeration: { setpointC: 4 },
+    description: "Modern cold-chain facility on the ECR highway.",
+  },
+  {
+    id: "puducherry-main",
+    name: "Puducherry Main Market",
+    type: "retail",
+    coordinates: [79.83, 11.934],
+    ambientOffsetC: -0.5,
+    refrigeration: null,
+    description: "Coastal town — sea breeze, high tourist footfall.",
+  },
+
+  // ── D. Mahabalipuram (~58 km south of Chennai along ECR) ──────────────────
+  {
+    id: "mahabalipuram-fish",
+    name: "Mahabalipuram Fish Landing",
+    type: "source",
+    coordinates: [80.199, 12.612],
+    ambientOffsetC: -1.0,
+    refrigeration: null,
+    handles: ["fish"],
+    description: "Small-scale fishing harbour south of Chennai.",
+  },
+  {
+    id: "mahabalipuram-market",
+    name: "Mahabalipuram Market",
+    type: "retail",
+    coordinates: [80.193, 12.617],
+    ambientOffsetC: -0.5,
+    refrigeration: null,
+    description: "Coastal tourist town — seafood and produce demand.",
+  },
+
+  // ── E. Chengalpattu (~55 km south of Chennai on NH45) ─────────────────────
+  {
+    id: "chengalpattu-wholesale",
+    name: "Chengalpattu Wholesale",
+    type: "source",
+    coordinates: [79.965, 12.68],
+    ambientOffsetC: 1.0,
+    refrigeration: null,
+    handles: ["tomato", "banana", "mango", "leafyVeg"],
+    description: "Agricultural wholesale collection centre.",
+  },
+  {
+    id: "hub-chengalpattu",
+    name: "Chengalpattu Cold Hub",
+    type: "hub",
+    coordinates: [79.97, 12.69],
+    ambientOffsetC: 0.5,
+    refrigeration: { setpointC: 5 },
+    description: "Highway cold storage on NH45 — relay point south.",
+  },
+  {
+    id: "chengalpattu-market",
+    name: "Chengalpattu Market",
+    type: "retail",
+    coordinates: [79.978, 12.685],
+    ambientOffsetC: 1.0,
+    refrigeration: null,
+    description: "District headquarters — major retail and agri hub.",
+  },
+
+  // ── F. Sriperumbudur (~40 km west of Chennai on NH4) ──────────────────────
+  {
+    id: "hub-sriperumbudur",
+    name: "Sriperumbudur Industrial Hub",
+    type: "hub",
+    coordinates: [79.94, 12.97],
+    ambientOffsetC: 0.5,
+    refrigeration: { setpointC: 5 },
+    description: "Industrial-corridor cold storage — gateway to western TN.",
+  },
+  {
+    id: "sriperumbudur-retail",
+    name: "Sriperumbudur Retail",
+    type: "retail",
+    coordinates: [79.945, 12.965],
+    ambientOffsetC: 1.0,
+    refrigeration: null,
+    description: "Growing township — food-service and retail demand.",
   }
 ];
 
@@ -596,6 +787,68 @@ export const CHENNAI_EDGES: CityEdge[] = [
   
   { id: "ambattur_porur", from: "hub-ambattur", to: "porur", travelTimeMin: 20, distanceKm: 8, ambientOffsetC: 0.5, floodProne: false, congestionProne: true },
   { id: "koyambedu_porur", from: "koyambedu", to: "porur", travelTimeMin: 15, distanceKm: 6.5, ambientOffsetC: 1.0, floodProne: false, congestionProne: false },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REGIONAL EXPANSION EDGES — Chennai ⇄ Tamil Nadu satellite cities.
+  // Implied speeds kept ≤40 km/h and road distance within 1–3× straight-line to
+  // satisfy the chennai.test.ts realism bounds. Two inter-city pairs have a
+  // flood-prone main + dry alternate so the monsoon scenario stays a real reroute
+  // decision; every regional retail also has a non-flood path from a local source.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Bridges: Chennai hubs → region ────────────────────────────────────────
+  { id: "guindy_chengalpattu_nh45", from: "hub-guindy", to: "hub-chengalpattu", travelTimeMin: 92, distanceKm: 55, ambientOffsetC: 1, floodProne: false, congestionProne: true },
+  { id: "guindy_chengalpattu_ecr", from: "hub-guindy", to: "hub-chengalpattu", travelTimeMin: 101, distanceKm: 63.8, ambientOffsetC: -0.5, floodProne: false, congestionProne: false },
+  { id: "ambattur_sriperumbudur", from: "hub-ambattur", to: "hub-sriperumbudur", travelTimeMin: 58, distanceKm: 34.1, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+  { id: "koyambedu_sriperumbudur", from: "koyambedu", to: "hub-sriperumbudur", travelTimeMin: 67, distanceKm: 37, ambientOffsetC: 1, floodProne: false, congestionProne: true },
+  { id: "tambaram_chengalpattu", from: "tambaram", to: "hub-chengalpattu", travelTimeMin: 64, distanceKm: 36.4, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+
+  // ── Region inter-hub (forward) ────────────────────────────────────────────
+  { id: "sriperumbudur_kanchipuram", from: "hub-sriperumbudur", to: "hub-kanchipuram", travelTimeMin: 62, distanceKm: 35.2, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+  { id: "sriperumbudur_vellore", from: "hub-sriperumbudur", to: "hub-vellore", travelTimeMin: 154, distanceKm: 97.3, ambientOffsetC: 1, floodProne: false, congestionProne: false },
+  { id: "kanchipuram_chengalpattu", from: "hub-kanchipuram", to: "hub-chengalpattu", travelTimeMin: 66, distanceKm: 38.7, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+  { id: "chengalpattu_puducherry_ecr", from: "hub-chengalpattu", to: "hub-puducherry", travelTimeMin: 158, distanceKm: 100.1, ambientOffsetC: -0.5, floodProne: true, congestionProne: false },
+  { id: "chengalpattu_puducherry_nh45a", from: "hub-chengalpattu", to: "hub-puducherry", travelTimeMin: 195, distanceKm: 110.3, ambientOffsetC: 1, floodProne: false, congestionProne: false },
+  { id: "chengalpattu_mahabalipuram", from: "hub-chengalpattu", to: "mahabalipuram-market", travelTimeMin: 60, distanceKm: 31.9, ambientOffsetC: -0.5, floodProne: true, congestionProne: false },
+  // Inland alternate to Mahabalipuram (slower, hotter) — keeps the coastal town
+  // reachable from the network when the ECR floods.
+  { id: "chengalpattu_mahabalipuram_inland", from: "hub-chengalpattu", to: "mahabalipuram-market", travelTimeMin: 71, distanceKm: 35.7, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+
+  // ── Region inter-hub (reverse — bidirectional transfer + region→Chennai) ───
+  { id: "chengalpattu_kanchipuram", from: "hub-chengalpattu", to: "hub-kanchipuram", travelTimeMin: 66, distanceKm: 38.7, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+  { id: "kanchipuram_sriperumbudur", from: "hub-kanchipuram", to: "hub-sriperumbudur", travelTimeMin: 62, distanceKm: 35.2, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+  { id: "vellore_sriperumbudur", from: "hub-vellore", to: "hub-sriperumbudur", travelTimeMin: 154, distanceKm: 97.3, ambientOffsetC: 1, floodProne: false, congestionProne: false },
+  { id: "puducherry_chengalpattu", from: "hub-puducherry", to: "hub-chengalpattu", travelTimeMin: 195, distanceKm: 110.3, ambientOffsetC: 1, floodProne: false, congestionProne: false },
+  { id: "chengalpattu_guindy", from: "hub-chengalpattu", to: "hub-guindy", travelTimeMin: 92, distanceKm: 55, ambientOffsetC: 1, floodProne: false, congestionProne: true },
+
+  // ── Local — Kanchipuram ───────────────────────────────────────────────────
+  { id: "kanchipuram_mandi_hub", from: "kanchipuram-mandi", to: "hub-kanchipuram", travelTimeMin: 3, distanceKm: 0.9, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+  { id: "kanchipuram_hub_silk", from: "hub-kanchipuram", to: "kanchipuram-silk-market", travelTimeMin: 4, distanceKm: 1.1, ambientOffsetC: 1, floodProne: false, congestionProne: false },
+  { id: "kanchipuram_mandi_silk", from: "kanchipuram-mandi", to: "kanchipuram-silk-market", travelTimeMin: 8, distanceKm: 2, ambientOffsetC: 1, floodProne: false, congestionProne: false },
+
+  // ── Local — Vellore ───────────────────────────────────────────────────────
+  { id: "vellore_agri_hub", from: "vellore-agri", to: "hub-vellore", travelTimeMin: 7, distanceKm: 2.2, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+  { id: "vellore_hub_cmc", from: "hub-vellore", to: "vellore-cmc", travelTimeMin: 5, distanceKm: 1.3, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+  { id: "vellore_hub_fort", from: "hub-vellore", to: "vellore-fort", travelTimeMin: 6, distanceKm: 1.5, ambientOffsetC: 0, floodProne: false, congestionProne: false },
+  { id: "vellore_agri_cmc", from: "vellore-agri", to: "vellore-cmc", travelTimeMin: 11, distanceKm: 2.8, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+
+  // ── Local — Puducherry ────────────────────────────────────────────────────
+  { id: "puducherry_harbour_hub", from: "puducherry-harbour", to: "hub-puducherry", travelTimeMin: 9, distanceKm: 2.4, ambientOffsetC: -0.5, floodProne: false, congestionProne: false },
+  { id: "auroville_puducherry_hub", from: "auroville-farm", to: "hub-puducherry", travelTimeMin: 21, distanceKm: 8.9, ambientOffsetC: -0.5, floodProne: false, congestionProne: false },
+  { id: "puducherry_hub_main", from: "hub-puducherry", to: "puducherry-main", travelTimeMin: 5, distanceKm: 1.2, ambientOffsetC: -0.5, floodProne: false, congestionProne: false },
+  { id: "puducherry_harbour_main", from: "puducherry-harbour", to: "puducherry-main", travelTimeMin: 5, distanceKm: 1.2, ambientOffsetC: -0.5, floodProne: false, congestionProne: false },
+
+  // ── Local — Mahabalipuram (fish→market NOT flood: monsoon-resilient path) ──
+  { id: "mahabalipuram_fish_market", from: "mahabalipuram-fish", to: "mahabalipuram-market", travelTimeMin: 5, distanceKm: 1.2, ambientOffsetC: -0.5, floodProne: false, congestionProne: false },
+  { id: "mahabalipuram_fish_chengalpattu", from: "mahabalipuram-fish", to: "hub-chengalpattu", travelTimeMin: 62, distanceKm: 32.9, ambientOffsetC: 0, floodProne: false, congestionProne: false },
+
+  // ── Local — Chengalpattu ──────────────────────────────────────────────────
+  { id: "chengalpattu_wholesale_hub", from: "chengalpattu-wholesale", to: "hub-chengalpattu", travelTimeMin: 6, distanceKm: 1.7, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
+  { id: "chengalpattu_hub_market", from: "hub-chengalpattu", to: "chengalpattu-market", travelTimeMin: 5, distanceKm: 1.4, ambientOffsetC: 1, floodProne: false, congestionProne: false },
+  { id: "chengalpattu_wholesale_market", from: "chengalpattu-wholesale", to: "chengalpattu-market", travelTimeMin: 8, distanceKm: 2.1, ambientOffsetC: 1, floodProne: false, congestionProne: false },
+
+  // ── Local — Sriperumbudur ─────────────────────────────────────────────────
+  { id: "sriperumbudur_hub_retail", from: "hub-sriperumbudur", to: "sriperumbudur-retail", travelTimeMin: 4, distanceKm: 1.1, ambientOffsetC: 0.5, floodProne: false, congestionProne: false },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
