@@ -21,6 +21,7 @@ import DecisionDialog from "@/components/academy/DecisionDialog";
 import WeatherWidget from "./WeatherWidget";
 import TrackingCard from "./TrackingCard";
 import MobileControlDock from "./MobileControlDock";
+import HeldShipmentsPanel from "./HeldShipmentsPanel";
 
 const DeckMap = dynamic(() => import("./DeckMap"), {
   ssr: false,
@@ -57,6 +58,9 @@ export default function TwinScreen() {
         </div>
         <div className="pointer-events-auto shrink-0 w-full flex justify-end">
           <ShipmentPanel />
+        </div>
+        <div className="pointer-events-auto shrink-0 w-full flex justify-end">
+          <HeldShipmentsPanel />
         </div>
       </div>
 

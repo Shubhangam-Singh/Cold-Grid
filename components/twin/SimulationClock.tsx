@@ -46,6 +46,9 @@ export default function SimulationClock() {
       // (sim-clock-driven; no wall-clock setTimeout for this any more)
       store.releaseHaltedTrucks();
 
+      // ── 1b. Park diverted trucks that have reached their cold hub ──────────
+      store.settleHeldArrivals();
+
       // ── 2. Resolve crisis-enabled flag for this scenario ──────────────────
       let crisisEnabled = true;
       let forcedCrises = undefined;

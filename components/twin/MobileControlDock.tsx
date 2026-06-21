@@ -17,6 +17,7 @@ import CityClock from "./CityClock";
 import WeatherWidget from "./WeatherWidget";
 import FarmImpactPanel from "./FarmImpactPanel";
 import ShipmentPanel from "./ShipmentPanel";
+import HeldShipmentsPanel from "./HeldShipmentsPanel";
 import MapLegend from "./MapLegend";
 
 export default function MobileControlDock() {
@@ -69,6 +70,7 @@ export default function MobileControlDock() {
               <WeatherWidget />
               <FarmImpactPanel />
               <ShipmentPanel />
+              <HeldShipmentsPanel />
               <MapLegend />
             </div>
           </div>

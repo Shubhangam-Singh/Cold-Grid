@@ -17,6 +17,7 @@ import { WebMercatorViewport } from "@deck.gl/core";
 import { Map } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import TruckMarker from "./TruckMarker";
+import HeldMarker from "./HeldMarker";
 import { getUrbanFarmLayers } from "./UrbanFarmLayer";
 
 import {
@@ -138,6 +139,8 @@ export default function DeckMap() {
   const setSelectedShipment = useColdgridStore((s) => s.setSelectedShipment);
   const showHeatmap = useColdgridStore((s) => s.showHeatmap);
   const showLabels = useColdgridStore((s) => s.showLabels);
+  const heldShipments = useColdgridStore((s) => s.heldShipments);
+  const heldAtHub = Object.values(heldShipments).filter((h) => h.arrivedClockHours != null);
   const blockedEdgeIds = useColdgridStore((s) => s.blockedEdgeIds);
   const reroutedShipments = useColdgridStore((s) => s.reroutedShipments);
 
@@ -558,6 +561,11 @@ export default function DeckMap() {
       {/* HTML truck overlays — 60fps rAF-smoothed, project lon/lat via viewportRef */}
       {inTransit.map((s) => (
         <TruckMarker key={s.id} shipment={s} viewportRef={viewportRef} />
+      ))}
+
+      {/* Parked-at-hub markers for incomplete (diverted) deliveries */}
+      {heldAtHub.map((h) => (
+        <HeldMarker key={h.shipmentId} held={h} viewportRef={viewportRef} />
       ))}
     </div>
   );

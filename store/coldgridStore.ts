@@ -19,11 +19,14 @@ import {
   type CityEdge,
   type CityNode,
   cityAmbientC,
+  getNode,
   nodeHoldingTempC,
+  planRoute,
 } from "@/lib/city/chennai";
 import {
   SIM_DT_HOURS,
   type DispatchOptions,
+  type Shipment,
   type SimulationState,
   clearDelivered,
   createSimulation,
@@ -32,6 +35,7 @@ import {
   stepSimulation,
 } from "@/lib/engine/simulation";
 import type { CrisisEvent } from "@/lib/engine/crisisEvents";
+import { type HeldShipment, heldFeeRupees } from "@/lib/logistics/hubHold";
 import { type WeatherData, fetchChennaiWeather } from "@/lib/weather/api";
 
 /**
@@ -143,6 +147,13 @@ export interface ColdgridState {
   blockedEdgeIds: string[];
   /** Shipment ID → new route edge IDs (flash "new route" layer after reroute). */
   reroutedShipments: Record<string, string[]>;
+  /**
+   * Loads diverted to a cold hub: their delivery is INCOMPLETE until resumed.
+   * Keyed by shipment id. While parked they accrue a per-hour storage fee.
+   */
+  heldShipments: Record<string, HeldShipment>;
+  /** Hub storage fees already banked from loads that have since been resumed. */
+  hubFeesPaidRupees: number;
 
   // ── Playback actions ────────────────────────────────────────────────────
   play: () => void;
@@ -170,6 +181,10 @@ export interface ColdgridState {
   toggleHeatmap: () => void;
   setHeatmap: (on: boolean) => void;
   toggleLabels: () => void;
+  /** Post-advance: park diverted trucks that have reached their cold hub. */
+  settleHeldArrivals: () => void;
+  /** Re-dispatch a parked load from its cold hub to its original destination. */
+  resumeFromHub: (shipmentId: string) => void;
   setDemoActive: (active: boolean) => void;
   resetToSeed: (seed: number, startHourOfDay?: number) => void;
 
@@ -210,6 +225,8 @@ const TRUCK_STATE_RESET = {
   activeCrisisId: null as string | null,
   blockedEdgeIds: [] as string[],
   reroutedShipments: {} as Record<string, string[]>,
+  heldShipments: {} as Record<string, HeldShipment>,
+  hubFeesPaidRupees: 0,
 };
 
 export const useColdgridStore = create<ColdgridState>((set, get) => ({
@@ -344,9 +361,30 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
     // option to look like a plain "reroute" before passing to the engine. This
     // keeps the engine untouched while still correctly replacing the route.
     let simForEngine = sim;
+    // When diverting to a cold hub, remember where the load was actually headed
+    // so the delivery can be resumed from the hub later (it's only INCOMPLETE).
+    let heldPatch: Record<string, HeldShipment> | null = null;
     if (option.effect.type === "divert_to_hub" || option.effect.type === "divert_kitchen") {
       const { newEdgeIds } = option.effect;
       const targetId = option.effect.type === "divert_to_hub" ? option.effect.hubId : option.effect.kitchenId;
+      if (option.effect.type === "divert_to_hub") {
+        const orig = sim.shipments.find((s) => s.id === crisis.shipmentId);
+        if (orig && orig.destinationId !== targetId) {
+          heldPatch = {
+            [crisis.shipmentId]: {
+              shipmentId: crisis.shipmentId,
+              produce: orig.produce,
+              hubId: targetId,
+              hubName: getNode(targetId).name,
+              originalDestId: orig.destinationId,
+              originalDestName: getNode(orig.destinationId).name,
+              qualityAtHold: orig.batch.quality,
+              arrivedClockHours: null,
+              snapshot: null,
+            },
+          };
+        }
+      }
       simForEngine = {
         ...sim,
         activeCrises: sim.activeCrises.map((c) => {
@@ -376,7 +414,13 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
     }
 
     const newSim = resolveCrisis(simForEngine, crisis.id, optionId);
-    set({ sim: newSim, activeCrisisId: null, blockedEdgeIds: newBlocked, reroutedShipments: newRerouted });
+    set((s) => ({
+      sim: newSim,
+      activeCrisisId: null,
+      blockedEdgeIds: newBlocked,
+      reroutedShipments: newRerouted,
+      ...(heldPatch ? { heldShipments: { ...s.heldShipments, ...heldPatch } } : {}),
+    }));
 
     // After 0.8s confirmation animation:
     // 1. Auto-resume simulation
@@ -426,6 +470,75 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   toggleHeatmap: () => set((s) => ({ showHeatmap: !s.showHeatmap })),
   setHeatmap: (on) => set({ showHeatmap: on }),
   toggleLabels: () => set((s) => ({ showLabels: !s.showLabels })),
+
+  // ── Cold-hub hold / resume ────────────────────────────────────────────────
+
+  settleHeldArrivals: () => {
+    const { sim, heldShipments } = get();
+    const ids = Object.keys(heldShipments);
+    if (ids.length === 0) return;
+
+    let changed = false;
+    const updatedHeld = { ...heldShipments };
+    let shipments = sim.shipments;
+    for (const id of ids) {
+      const held = heldShipments[id];
+      if (held.arrivedClockHours != null) continue; // already parked
+      const arrived = sim.shipments.find((s) => s.id === id && s.status === "delivered");
+      if (arrived) {
+        // Truck reached the hub: park it (mark INCOMPLETE), start the fee clock,
+        // and pull it out of the active sim so it isn't counted as delivered.
+        updatedHeld[id] = {
+          ...held,
+          arrivedClockHours: sim.clockHours,
+          qualityAtHold: arrived.batch.quality,
+          snapshot: arrived,
+        };
+        shipments = shipments.filter((s) => s.id !== id);
+        changed = true;
+      }
+    }
+    if (changed) set({ sim: { ...sim, shipments }, heldShipments: updatedHeld });
+  },
+
+  resumeFromHub: (shipmentId) => {
+    const { sim, heldShipments, hubFeesPaidRupees, transitionTruckState } = get();
+    const held = heldShipments[shipmentId];
+    if (!held || held.arrivedClockHours == null || !held.snapshot) return;
+
+    const route = planRoute(held.hubId, held.originalDestId, {
+      closedEdgeIds: sim.closedEdgeIds,
+    });
+    if (!route || route.length === 0) return; // no open road — stay parked
+
+    // Bank the accrued storage fee and rebuild the load from the hub, carrying
+    // the same cargo (quality/energy/reefer) forward to its original destination.
+    const fee = heldFeeRupees(held, sim.clockHours);
+    const resumed: Shipment = {
+      ...held.snapshot,
+      route,
+      legIndex: 0,
+      legProgress: 0,
+      status: "in-transit",
+      originId: held.hubId,
+      destinationId: held.originalDestId,
+      position: getNode(held.hubId).coordinates,
+      angle: 0,
+      crisisCheckedLegs: [],
+      crisisSpeedPenalty: 1.0,
+      dispatchClockHours: sim.clockHours,
+    };
+
+    const restHeld = { ...heldShipments };
+    delete restHeld[shipmentId];
+    set({
+      sim: { ...sim, shipments: [...sim.shipments, resumed] },
+      heldShipments: restHeld,
+      hubFeesPaidRupees: hubFeesPaidRupees + fee,
+    });
+    transitionTruckState(shipmentId, "ACCELERATING", { badge: null });
+  },
+
   setDemoActive: (active) => set({ demoActive: active }),
   resetToSeed: (seed, startHourOfDay) =>
     set({ sim: createSimulation(seed, { startHourOfDay }), isPlaying: false, ...TRUCK_STATE_RESET }),
