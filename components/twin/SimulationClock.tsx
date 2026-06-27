@@ -37,11 +37,11 @@ export default function SimulationClock() {
 
   useEffect(() => {
     if (!isPlaying) return;
-    // Fixed wall-clock interval — speed is achieved by advancing MORE sim-time
-    // per tick rather than shrinking the interval. At 32× the interval would be
-    // 18.75ms which browsers can't reliably deliver, causing dropped ticks.
-    const intervalMs = TICK_INTERVAL_MS; // always 600ms
-    const dtHours = SIM_DT_HOURS * speed; // scale sim-time per tick by speed
+    // Calculate a dynamic interval: we want 600ms / speed, but we floor it at
+    // 50ms (20 FPS) so the browser doesn't drop frames. If we hit the 50ms floor,
+    // we compensate by increasing the amount of sim-time (dtHours) per tick.
+    const intervalMs = Math.max(50, TICK_INTERVAL_MS / speed);
+    const dtHours = SIM_DT_HOURS * (intervalMs / TICK_INTERVAL_MS) * speed;
 
     const id = setInterval(() => {
       const store = useColdgridStore.getState();

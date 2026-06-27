@@ -46,11 +46,13 @@ import { type WeatherData, fetchChennaiWeather } from "@/lib/weather/api";
  *   Actually: 1 tick = 600ms, so ticks/sec = 1000/600 = 1.667.
  *   sim-min/sec = 1.667 × 0.01h × 60 = 1.0 sim-min/sec. ✅
  *
- * Higher speeds multiply dtHours per tick instead of shrinking the interval,
- * because browsers can't reliably fire setInterval below ~16ms:
- *   At 4×:  interval = 600ms, dtHours = 0.04h → 4  sim-min / real-sec
- *   At 16×: interval = 600ms, dtHours = 0.16h → 16 sim-min / real-sec
- *   At 32×: interval = 600ms, dtHours = 0.32h → 32 sim-min / real-sec
+ * Higher speeds shrink the interval to animate smoothly, but we floor it at
+ * 50ms (20 FPS) because browsers can't reliably fire setInterval below ~16-30ms,
+ * and React renders get heavy. If we hit the 50ms floor, we compensate by
+ * advancing more sim-time (dtHours) per tick.
+ *   At 4×:  interval = 150ms, dtHours = 0.01h → 4  sim-min / real-sec
+ *   At 16×: interval = 50ms,  dtHours = 0.0133h → 16 sim-min / real-sec
+ *   At 32×: interval = 50ms,  dtHours = 0.0266h → 32 sim-min / real-sec
  */
 export const TICK_INTERVAL_MS = 600;
 
@@ -566,7 +568,7 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   },
 
   syncCrisisQueue: () => {
-    const { sim, activeCrisisId, crisisQueue, transitionTruckState } = get();
+    const { sim, activeCrisisId, crisisQueue, transitionTruckState, speed } = get();
     const unresolved = sim.activeCrises.filter((c) => !c.resolved);
 
     const knownIds = new Set([
@@ -576,8 +578,13 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
     const newCrises = unresolved.filter((c) => !knownIds.has(c.id));
     if (newCrises.length === 0) return;
 
-    // Pause on any crisis
-    set({ isPlaying: false });
+    // At slow speeds (≤4×), pause so the dialog is clearly visible.
+    // At high speeds (16×/32×), keep the sim running — the affected truck is
+    // already frozen by crisisSpeedPenalty=0, so other trucks continue moving.
+    // The dialog overlay is shown regardless of isPlaying.
+    if (speed <= 4) {
+      set({ isPlaying: false });
+    }
 
     let nextActiveCrisisId = get().activeCrisisId;
     const nextQueue = [...get().crisisQueue];

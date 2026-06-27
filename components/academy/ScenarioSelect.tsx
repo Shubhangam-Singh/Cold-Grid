@@ -19,8 +19,8 @@ export default function ScenarioSelect() {
   const cert = certificationLevel(totalStars, SCENARIOS.length);
 
   return (
-    <div className="h-full w-full overflow-y-auto bg-transparent px-6 py-8">
-      <div className="mx-auto max-w-4xl pt-10">
+    <div className="h-full w-full overflow-y-auto bg-transparent px-4 sm:px-6 py-6 sm:py-8">
+      <div className="mx-auto max-w-4xl pt-6 sm:pt-10">
         <h1 className="text-4xl font-bold text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.2)]">Operator Training Academy</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">
           You are Chennai&apos;s cold-chain duty officer. Handle five real-world crises, keep the

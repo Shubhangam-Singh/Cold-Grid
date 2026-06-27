@@ -30,9 +30,9 @@ export default function Briefing() {
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 1.02 }}
       transition={{ duration: 0.4 }}
-      className="flex h-full w-full items-center justify-center overflow-y-auto bg-transparent px-6 py-8"
+      className="flex h-full w-full items-center justify-center overflow-y-auto bg-transparent px-4 sm:px-6 py-6 sm:py-8"
     >
-      <div className="relative max-w-2xl w-full rounded-2xl glass-panel p-8 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+      <div className="relative max-w-2xl w-full rounded-2xl glass-panel p-5 sm:p-8 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
         <div className="absolute top-0 left-1/2 h-px w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-twin-cyan/50 to-transparent"></div>
         
         <motion.div variants={containerVariants} initial="hidden" animate="show">

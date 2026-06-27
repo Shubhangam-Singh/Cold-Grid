@@ -49,8 +49,8 @@ export default function ResultScreen() {
   const cert = certificationLevel(totalStars, SCENARIOS.length);
 
   return (
-    <div className="flex h-full w-full items-center justify-center overflow-y-auto bg-[#07090d]/95 px-6 py-8">
-      <div className="max-h-full w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-6">
+    <div className="flex h-full w-full items-center justify-center overflow-y-auto bg-[#07090d]/95 px-4 sm:px-6 py-6 sm:py-8">
+      <div className="max-h-full w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-4 sm:p-6">
         <div className="flex items-center justify-between">
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-sky-400">

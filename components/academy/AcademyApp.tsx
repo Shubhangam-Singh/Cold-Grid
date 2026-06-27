@@ -37,9 +37,9 @@ function RunningBanner() {
   const speed = useColdgridStore((s) => s.speed);
   const setSpeed = useColdgridStore((s) => s.setSpeed);
   return (
-    <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-lg border border-slate-800 bg-slate-950/90 px-4 py-2 backdrop-blur">
-      <div className="flex items-center gap-3">
-        <span className="font-mono text-xs uppercase tracking-[0.2em] text-emerald-400">
+    <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 w-[95vw] sm:w-auto rounded-lg border border-slate-800 bg-slate-950/90 px-3 py-2 sm:px-4 backdrop-blur">
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-center gap-2 sm:gap-3">
+        <span className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.2em] text-emerald-400">
           ● Running the day…
         </span>
         <div className="flex items-center gap-1" role="group" aria-label="Speed">
@@ -122,7 +122,11 @@ export default function AcademyApp() {
         {phase === "running" && (
           <>
             <RunningBanner />
-            <ShipmentPanel />
+            <div className="absolute right-3 top-20 sm:right-6 sm:top-6 z-10 pointer-events-none flex justify-end">
+              <div className="pointer-events-auto origin-top-right scale-90 sm:scale-100 transition-transform">
+                <ShipmentPanel />
+              </div>
+            </div>
           </>
         )}
         {phase === "result" && <ResultScreen />}
