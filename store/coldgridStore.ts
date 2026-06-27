@@ -39,16 +39,18 @@ import { type HeldShipment, heldFeeRupees } from "@/lib/logistics/hubHold";
 import { type WeatherData, fetchChennaiWeather } from "@/lib/weather/api";
 
 /**
- * Wall-clock interval between ticks at 1× speed (ms).
+ * Wall-clock interval between ticks at all speeds (ms).
  *
- * Calibration: SIM_DT_HOURS = 0.01h per tick.
+ * Calibration: SIM_DT_HOURS = 0.01h per tick at 1×.
  *   600ms/tick × (1 tick / 600ms) = 1 tick/s → 0.01h/s = 0.6 sim-min/s... wait
  *   Actually: 1 tick = 600ms, so ticks/sec = 1000/600 = 1.667.
  *   sim-min/sec = 1.667 × 0.01h × 60 = 1.0 sim-min/sec. ✅
  *
- * At 4×:  interval = 600/4  = 150ms  → 4  sim-min / real-sec
- * At 16×: interval = 600/16 = 37.5ms → 16 sim-min / real-sec
- * At 32×: interval = 600/32 = 18.75ms→ 32 sim-min / real-sec
+ * Higher speeds multiply dtHours per tick instead of shrinking the interval,
+ * because browsers can't reliably fire setInterval below ~16ms:
+ *   At 4×:  interval = 600ms, dtHours = 0.04h → 4  sim-min / real-sec
+ *   At 16×: interval = 600ms, dtHours = 0.16h → 16 sim-min / real-sec
+ *   At 32×: interval = 600ms, dtHours = 0.32h → 32 sim-min / real-sec
  */
 export const TICK_INTERVAL_MS = 600;
 

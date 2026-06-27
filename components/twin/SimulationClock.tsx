@@ -16,6 +16,7 @@
 
 import { useEffect, useRef } from "react";
 import { TICK_INTERVAL_MS, useColdgridStore } from "@/store/coldgridStore";
+import { SIM_DT_HOURS } from "@/lib/engine/simulation";
 import { useAcademyStore } from "@/store/academyStore";
 import { getScenario } from "@/lib/academy/scenarios";
 import { createCrisis } from "@/lib/engine/crisisEvents";
@@ -36,11 +37,15 @@ export default function SimulationClock() {
 
   useEffect(() => {
     if (!isPlaying) return;
-    const intervalMs = TICK_INTERVAL_MS / speed;
+    // Fixed wall-clock interval — speed is achieved by advancing MORE sim-time
+    // per tick rather than shrinking the interval. At 32× the interval would be
+    // 18.75ms which browsers can't reliably deliver, causing dropped ticks.
+    const intervalMs = TICK_INTERVAL_MS; // always 600ms
+    const dtHours = SIM_DT_HOURS * speed; // scale sim-time per tick by speed
 
     const id = setInterval(() => {
       const store = useColdgridStore.getState();
-      store.advance();
+      store.advance(dtHours);
 
       // ── 1. Release halted trucks whose repair time has elapsed in sim-time ──
       // (sim-clock-driven; no wall-clock setTimeout for this any more)
