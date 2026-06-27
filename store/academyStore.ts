@@ -48,6 +48,11 @@ interface AcademyState {
   /** Pre/post assessment scores (% correct), null until taken. */
   preScore: number | null;
   postScore: number | null;
+  /** The raw answers, kept so we can show which misconceptions were corrected. */
+  preAnswers: Record<string, number> | null;
+  postAnswers: Record<string, number> | null;
+  /** Operator's free-text reflection per scenario ("what I'd do differently"). */
+  reflections: Record<string, string>;
 
   openBriefing: (scenarioId: string) => void;
   startOperate: () => void;
@@ -60,6 +65,7 @@ interface AcademyState {
 
   startAssessment: (mode: "pre" | "post") => void;
   submitAssessment: (mode: "pre" | "post", answers: Record<string, number>) => void;
+  setReflection: (scenarioId: string, text: string) => void;
   viewCertificate: () => void;
 }
 
@@ -96,6 +102,9 @@ export const useAcademyStore = create<AcademyState>((set, get) => ({
   completed: {},
   preScore: null,
   postScore: null,
+  preAnswers: null,
+  postAnswers: null,
+  reflections: {},
 
   openBriefing: (scenarioId) => {
     const scenario = getScenario(scenarioId);
@@ -169,9 +178,12 @@ export const useAcademyStore = create<AcademyState>((set, get) => ({
 
   submitAssessment: (mode, answers) => {
     const score = scoreQuiz(answers);
-    if (mode === "pre") set({ preScore: score, phase: "select" });
-    else set({ postScore: score, phase: "certificate" });
+    if (mode === "pre") set({ preScore: score, preAnswers: answers, phase: "select" });
+    else set({ postScore: score, postAnswers: answers, phase: "certificate" });
   },
+
+  setReflection: (scenarioId, text) =>
+    set((s) => ({ reflections: { ...s.reflections, [scenarioId]: text } })),
 
   viewCertificate: () => set({ phase: "certificate" }),
 }));

@@ -48,6 +48,36 @@ export default function Briefing() {
             {s.subtitle}
           </motion.div>
 
+          {/* What-If panel — sets the learning intention before play */}
+          {(s.whatYouWillLearn || s.whatIfQuestion || s.realWorldParallel) && (
+            <motion.div variants={itemVariants} className="mt-6 grid gap-2.5">
+              {s.whatYouWillLearn && (
+                <div className="rounded-xl border border-sky-500/25 bg-sky-500/[0.07] p-3.5">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-sky-400">
+                    🎯 What you&apos;ll learn
+                  </div>
+                  <p className="mt-1 text-sm font-medium text-slate-100">{s.whatYouWillLearn}</p>
+                </div>
+              )}
+              {s.whatIfQuestion && (
+                <div className="rounded-xl border border-twin-amber/30 bg-twin-amber/[0.07] p-3.5">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-twin-amber">
+                    💭 What if…
+                  </div>
+                  <p className="mt-1 text-sm font-medium italic text-amber-100">{s.whatIfQuestion}</p>
+                </div>
+              )}
+              {s.realWorldParallel && (
+                <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] p-3.5">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-400">
+                    🌍 Real-world parallel
+                  </div>
+                  <p className="mt-1 text-sm text-slate-300">{s.realWorldParallel}</p>
+                </div>
+              )}
+            </motion.div>
+          )}
+
           <motion.div variants={itemVariants} className="mt-6 space-y-4">
             {s.briefing.map((p, i) => (
               <p key={i} className="text-[15px] leading-relaxed text-slate-300">

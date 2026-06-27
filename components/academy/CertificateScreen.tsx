@@ -5,8 +5,9 @@
  * measurable PRE → POST assessment delta — the competition's learning evidence.
  */
 
-import { SCENARIOS } from "@/lib/academy/scenarios";
+import { SCENARIOS, getScenario } from "@/lib/academy/scenarios";
 import { certificationLevel } from "@/lib/academy/scoring";
+import { correctedMisconceptions } from "@/lib/academy/assessment";
 import { useAcademyStore } from "@/store/academyStore";
 import Stars from "./Stars";
 
@@ -14,12 +15,18 @@ export default function CertificateScreen() {
   const completed = useAcademyStore((s) => s.completed);
   const preScore = useAcademyStore((s) => s.preScore);
   const postScore = useAcademyStore((s) => s.postScore);
+  const preAnswers = useAcademyStore((s) => s.preAnswers);
+  const postAnswers = useAcademyStore((s) => s.postAnswers);
+  const reflections = useAcademyStore((s) => s.reflections);
   const backToSelect = useAcademyStore((s) => s.backToSelect);
 
   const totalStars = Object.values(completed).reduce((s, c) => s + c.stars, 0);
   const totalFoodDiverted = Object.values(completed).reduce((s, c) => s + (c.foodSavedKg || 0), 0);
   const cert = certificationLevel(totalStars, SCENARIOS.length);
   const delta = preScore != null && postScore != null ? postScore - preScore : null;
+  const corrected =
+    preAnswers && postAnswers ? correctedMisconceptions(preAnswers, postAnswers) : null;
+  const reflectionEntries = Object.entries(reflections).filter(([, v]) => v.trim().length > 0);
 
   return (
     <div className="flex h-full w-full items-center justify-center overflow-y-auto bg-[#07090d] px-6 py-8">
@@ -56,7 +63,31 @@ export default function CertificateScreen() {
               Take the pre- and post-training assessments to measure your gain.
             </p>
           )}
+          {corrected != null && corrected > 0 && (
+            <div className="mt-3 inline-block rounded-full border border-emerald-700/50 bg-emerald-950/40 px-3 py-1 text-xs font-semibold text-emerald-300">
+              ✓ You corrected {corrected} misconception{corrected > 1 ? "s" : ""}
+            </div>
+          )}
         </div>
+
+        {/* Operator reflections — articulating the lesson */}
+        {reflectionEntries.length > 0 && (
+          <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-left">
+            <div className="text-center font-mono text-[10px] uppercase tracking-[0.2em] text-twin-amber">
+              Your reflections
+            </div>
+            <ul className="mt-2 space-y-2">
+              {reflectionEntries.map(([sid, text]) => (
+                <li key={sid} className="rounded-lg bg-slate-900/60 p-2.5">
+                  <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                    {getScenario(sid).title}
+                  </div>
+                  <p className="mt-0.5 text-xs italic text-slate-300">“{text}”</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Per-scenario stars */}
         <div className="mt-5 grid grid-cols-1 gap-1.5 text-left sm:grid-cols-2">

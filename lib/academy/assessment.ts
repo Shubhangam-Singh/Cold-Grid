@@ -32,6 +32,21 @@ export const ASSESSMENT: QuizQuestion[] = [
       "Arrhenius/Q10: each ~10 °C typically multiplies the reaction rate by ~2–3×. The exact factor depends on the activation energy, which differs per produce.",
   },
   {
+    id: "q-time-temp",
+    concept: "arrhenius-q10",
+    question:
+      "Which does MORE spoilage damage to a fresh load: 2 hours at 15 °C, or 4 hours at 8 °C?",
+    options: [
+      "4 hours at 8 °C — longer exposure always wins",
+      "2 hours at 15 °C — the warmer spell does more damage despite being shorter",
+      "They're identical — it's just temperature × time",
+      "Neither — below 20 °C nothing spoils",
+    ],
+    correctIndex: 1,
+    explanation:
+      "Spoilage rate is exponential in temperature (Arrhenius), not linear. The hotter 2-hour exposure outpaces the longer-but-colder one — a 'temperature × time' intuition gets it backwards.",
+  },
+  {
     id: "q-cold-chain",
     concept: "cold-chain",
     question: "What is the core purpose of an unbroken cold chain?",
@@ -104,4 +119,19 @@ export function scoreQuiz(answers: Record<string, number>): number {
 /** Number of correct answers. */
 export function countCorrect(answers: Record<string, number>): number {
   return ASSESSMENT.reduce((n, q) => n + (answers[q.id] === q.correctIndex ? 1 : 0), 0);
+}
+
+/**
+ * Misconceptions corrected by training: questions answered WRONG before but
+ * RIGHT after. This is the headline learning-evidence number on the certificate.
+ */
+export function correctedMisconceptions(
+  pre: Record<string, number>,
+  post: Record<string, number>
+): number {
+  return ASSESSMENT.reduce((n, q) => {
+    const wasWrong = pre[q.id] !== q.correctIndex;
+    const nowRight = post[q.id] === q.correctIndex;
+    return n + (wasWrong && nowRight ? 1 : 0);
+  }, 0);
 }

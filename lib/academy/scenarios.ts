@@ -27,6 +27,11 @@ export const SCENARIOS: Scenario[] = [
     ],
     learningObjective:
       "Read the console, dispatch a shipment, pick a transport setpoint, and interpret the result.",
+    whatYouWillLearn:
+      "Why fish landed fresh at dawn can reach the market near-spoiled by mid-morning — purely from the temperature it travelled at.",
+    whatIfQuestion: "What if you could see a load's final freshness before you chose how to ship it?",
+    realWorldParallel:
+      "This is the call Kasimedu harbour traders make every morning — ice it into a reefer, or send it ambient and race the heat.",
     scenarioOffsetC: 0,
     closedEdgeIds: [],
     startHourOfDay: 5,
@@ -53,6 +58,11 @@ export const SCENARIOS: Scenario[] = [
     ],
     learningObjective:
       "Manage the cold / energy / CO₂ tradeoff when ambient temperature is extreme.",
+    whatYouWillLearn:
+      "Why every ~10 °C of extra heat roughly doubles the spoilage rate — and why cooling harder against it is never free.",
+    whatIfQuestion: "What if protecting the cargo and protecting the grid pulled in opposite directions?",
+    realWorldParallel:
+      "Exactly the trade-off Chennai cold-storage operators face on a 40 °C afternoon: more cooling saves food but spikes energy and CO₂.",
     scenarioOffsetC: 8,
     closedEdgeIds: [],
     startHourOfDay: 12,
@@ -85,6 +95,11 @@ export const SCENARIOS: Scenario[] = [
     ],
     learningObjective:
       "Triage and prioritize a scarce cold resource across mixed-fragility stock.",
+    whatYouWillLearn:
+      "How to spend a scarce cold resource where it changes the outcome — and recognise where it's simply wasted.",
+    whatIfQuestion: "What if you could only refrigerate half your loads — which half do you save?",
+    realWorldParallel:
+      "When a substation drops and generators run on rationed fuel, this is the triage real cold-chain duty officers run.",
     scenarioOffsetC: 3,
     closedEdgeIds: [],
     startHourOfDay: 13,
@@ -114,6 +129,11 @@ export const SCENARIOS: Scenario[] = [
     ],
     learningObjective:
       "Plan resilient routing when the fastest roads are cut, and compensate for longer transit.",
+    whatYouWillLearn:
+      "Why a longer detour costs freshness, and how a colder setpoint buys back the time the flood took.",
+    whatIfQuestion: "What if the fastest road vanished and every alternate added hours in the heat?",
+    realWorldParallel:
+      "Each northeast monsoon, Chennai's flooded low-lying roads force exactly these longer, warmer reroutes.",
     scenarioOffsetC: -1,
     closedEdgeIds: ["guindy_velachery_main", "guindy_adyar_main", "kasimedu_mylapore_coastal"],
     startHourOfDay: 10,
@@ -142,6 +162,11 @@ export const SCENARIOS: Scenario[] = [
     ],
     learningObjective:
       "Balance high throughput against spoilage and energy when the network is saturated.",
+    whatYouWillLearn:
+      "How to hold spoilage down when demand doubles and you can't gold-plate the cold chain on every shipment.",
+    whatIfQuestion: "What if every market wanted stock at once and you couldn't refrigerate them all well?",
+    realWorldParallel:
+      "Pongal week genuinely doubles Chennai's market demand — throughput versus spoilage is the operator's daily call.",
     scenarioOffsetC: 4,
     closedEdgeIds: [],
     startHourOfDay: 11,

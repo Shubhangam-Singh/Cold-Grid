@@ -14,6 +14,8 @@ import { useAcademyStore } from "@/store/academyStore";
 import { getProduce } from "@/lib/engine/produce";
 import { qualityToRgb, rgbCss } from "@/components/twin/colors";
 import type { DeliveryResult } from "@/lib/academy/run";
+import { buildCausalChain, type CausalChain } from "@/lib/academy/causal";
+import CausalModal from "./CausalModal";
 import Stars from "./Stars";
 
 // Lazy — pulls in recharts only when a decay curve is actually opened.
@@ -32,8 +34,12 @@ export default function ResultScreen() {
   const backToSelect = useAcademyStore((s) => s.backToSelect);
   const startAssessment = useAcademyStore((s) => s.startAssessment);
   const viewCertificate = useAcademyStore((s) => s.viewCertificate);
+  const reflections = useAcademyStore((s) => s.reflections);
+  const setReflection = useAcademyStore((s) => s.setReflection);
+  const decisions = useAcademyStore((s) => s.decisions);
 
   const [curve, setCurve] = useState<DeliveryResult | null>(null);
+  const [causal, setCausal] = useState<CausalChain | null>(null);
 
   if (!scenarioId || !results || !score) return null;
   const scenario = getScenario(scenarioId);
@@ -106,10 +112,32 @@ export default function ResultScreen() {
                     {r.onTime ? "on time" : "late"}
                   </span>
                   {r.spoiled && <span className="text-red-400">⚠ spoiled</span>}
+                  {r.dispatched && r.history.length >= 2 && (
+                    <button
+                      onClick={() => {
+                        const d = decisions[r.delivery.id];
+                        setCausal(
+                          buildCausalChain({
+                            produce: r.delivery.produce,
+                            reefer: r.reefer,
+                            setpointC: r.reefer ? d?.setpointC ?? null : null,
+                            history: r.history,
+                            finalQuality: r.qualityPct,
+                            spoiled: r.spoiled,
+                          })
+                        );
+                      }}
+                      className={`ml-auto font-semibold underline-offset-2 hover:underline ${
+                        r.spoiled || r.qualityPct < 50 ? "text-red-300" : "text-twin-cyan"
+                      }`}
+                    >
+                      Understand why →
+                    </button>
+                  )}
                   {r.history.length >= 2 && (
                     <button
                       onClick={() => setCurve(r)}
-                      className="ml-auto text-sky-400 underline-offset-2 hover:underline"
+                      className="text-sky-400 underline-offset-2 hover:underline"
                     >
                       decay curve →
                     </button>
@@ -133,6 +161,21 @@ export default function ResultScreen() {
               </span>
             ))}
           </div>
+        </div>
+
+        {/* Reflection — articulating the lesson cements it (shown on the certificate) */}
+        <div className="mt-4 rounded-lg border border-amber-900/50 bg-amber-950/15 p-3">
+          <label htmlFor="reflection" className="font-mono text-[10px] uppercase tracking-[0.2em] text-twin-amber">
+            ✍ What would you do differently, and why?
+          </label>
+          <textarea
+            id="reflection"
+            value={reflections[scenarioId] ?? ""}
+            onChange={(e) => setReflection(scenarioId, e.target.value)}
+            rows={2}
+            placeholder="One sentence on what you'd change next run — it'll appear on your certificate."
+            className="mt-2 w-full resize-y rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:border-twin-amber/60 focus:outline-none"
+          />
         </div>
 
         {isLast && (
@@ -186,6 +229,8 @@ export default function ResultScreen() {
           onClose={() => setCurve(null)}
         />
       )}
+
+      {causal && <CausalModal chain={causal} onClose={() => setCausal(null)} />}
     </div>
   );
 }

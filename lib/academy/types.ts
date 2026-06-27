@@ -51,6 +51,14 @@ export interface Scenario {
   briefing: string[];
   learningObjective: string;
 
+  // ── What-If briefing panel (sets the learning intention before play) ───────
+  /** One sentence: the core thing this scenario teaches. */
+  whatYouWillLearn?: string;
+  /** A provocative "what if…" question that frames the decision ahead. */
+  whatIfQuestion?: string;
+  /** How this maps to real Chennai cold-chain operations. */
+  realWorldParallel?: string;
+
   // ── Environment ───────────────────────────────────────────────────────────
   /** Ambient override °C (heatwave +, monsoon −). */
   scenarioOffsetC: number;
