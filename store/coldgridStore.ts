@@ -127,6 +127,8 @@ export interface ColdgridState {
   showHeatmap: boolean;
   /** Node-name labels on the map (off declutters the wider regional view). */
   showLabels: boolean;
+  /** Urban Heat Island overlay: warmer dense-concrete zones vs cooler water/green. */
+  showUHI: boolean;
   /** Scripted Demo Mode is running. */
   demoActive: boolean;
 
@@ -185,6 +187,7 @@ export interface ColdgridState {
   toggleHeatmap: () => void;
   setHeatmap: (on: boolean) => void;
   toggleLabels: () => void;
+  toggleUHI: () => void;
   /** Post-advance: park diverted trucks that have reached their cold hub. */
   settleHeldArrivals: () => void;
   /** Re-dispatch a parked load from its cold hub to its original destination. */
@@ -246,6 +249,7 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   selectedShipmentId: null,
   showHeatmap: false,
   showLabels: true,
+  showUHI: false,
   demoActive: false,
   pendingDispatch: null,
   weatherData: null,
@@ -474,6 +478,7 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   toggleHeatmap: () => set((s) => ({ showHeatmap: !s.showHeatmap })),
   setHeatmap: (on) => set({ showHeatmap: on }),
   toggleLabels: () => set((s) => ({ showLabels: !s.showLabels })),
+  toggleUHI: () => set((s) => ({ showUHI: !s.showUHI })),
 
   // ── Cold-hub hold / resume ────────────────────────────────────────────────
 

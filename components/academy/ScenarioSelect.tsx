@@ -28,6 +28,14 @@ export default function ScenarioSelect() {
           saved, on-time delivery, and carbon efficiency.
         </p>
 
+        {/* Pedagogical framework — signals intentional learning design */}
+        <p className="mt-3 max-w-2xl rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-twin-cyan">Pedagogy · </span>
+          ColdGrid follows Kolb&apos;s Experiential Learning Cycle: Concrete Experience (run a scenario) →
+          Reflective Observation (debrief &amp; reflect) → Abstract Conceptualisation (the causal model) →
+          Active Experimentation (retry &amp; refine).
+        </p>
+
         {attempted > 0 && (
           <div className="mt-4 flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/70 px-4 py-3">
             <span className="font-mono text-2xl font-semibold text-amber-400">

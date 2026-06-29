@@ -139,6 +139,7 @@ export default function DeckMap() {
   const setSelectedShipment = useColdgridStore((s) => s.setSelectedShipment);
   const showHeatmap = useColdgridStore((s) => s.showHeatmap);
   const showLabels = useColdgridStore((s) => s.showLabels);
+  const showUHI = useColdgridStore((s) => s.showUHI);
   const heldShipments = useColdgridStore((s) => s.heldShipments);
   const heldAtHub = Object.values(heldShipments).filter((h) => h.arrivedClockHours != null);
   const blockedEdgeIds = useColdgridStore((s) => s.blockedEdgeIds);
@@ -230,6 +231,30 @@ export default function DeckMap() {
       intensity: 1.1,
       threshold: 0.05,
       colorRange: RISK_COLORS,
+      aggregation: "SUM",
+      pickable: false,
+    });
+
+    // Urban Heat Island: dense-concrete zones (positive ambient offset) glow warm;
+    // coastal / green / water zones (≤0 offset) stay dark = cooler.
+    const UHI_COLORS: [number, number, number][] = [
+      [255, 255, 178], [254, 217, 118], [254, 178, 76],
+      [253, 141, 60], [240, 59, 32], [189, 0, 38],
+    ];
+    const uhiData: RiskPoint[] = showUHI
+      ? nodes
+          .map((n) => ({ position: n.coordinates, weight: Math.max(0, n.ambientOffsetC) }))
+          .filter((d) => d.weight > 0)
+      : [];
+    const uhiLayer = new HeatmapLayer<RiskPoint>({
+      id: "uhi-heat",
+      data: uhiData,
+      getPosition: (d) => d.position,
+      getWeight: (d) => d.weight,
+      radiusPixels: 95,
+      intensity: 1,
+      threshold: 0.03,
+      colorRange: UHI_COLORS,
       aggregation: "SUM",
       pickable: false,
     });
@@ -495,7 +520,11 @@ export default function DeckMap() {
       destPulseLayer, nodeLayer,
       ...(showLabels ? [labelLayer] : []),
     ];
-    return showHeatmap ? [heatLayer, ...base] : base;
+    // Heat overlays render UNDER the network (prepended = bottom of the stack).
+    const overlays = [];
+    if (showUHI) overlays.push(uhiLayer);
+    if (showHeatmap) overlays.push(heatLayer);
+    return [...overlays, ...base];
     // tempOf closes over hourOfDay/scenarioOffsetC; listed below so layers rebuild.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -505,6 +534,7 @@ export default function DeckMap() {
     riskData,
     showHeatmap,
     showLabels,
+    showUHI,
     inTransit,
     hourOfDay,
     scenarioOffsetC,

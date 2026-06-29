@@ -5,9 +5,11 @@
  * measurable PRE → POST assessment delta — the competition's learning evidence.
  */
 
+import { useState } from "react";
 import { SCENARIOS, getScenario } from "@/lib/academy/scenarios";
 import { certificationLevel } from "@/lib/academy/scoring";
 import { correctedMisconceptions } from "@/lib/academy/assessment";
+import { downloadCertificatePdf } from "@/lib/academy/certificatePdf";
 import { useAcademyStore } from "@/store/academyStore";
 import Stars from "./Stars";
 
@@ -27,6 +29,29 @@ export default function CertificateScreen() {
   const corrected =
     preAnswers && postAnswers ? correctedMisconceptions(preAnswers, postAnswers) : null;
   const reflectionEntries = Object.entries(reflections).filter(([, v]) => v.trim().length > 0);
+
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const downloadPdf = async () => {
+    setSaving(true);
+    try {
+      await downloadCertificatePdf({
+        name,
+        level: cert.level,
+        totalStars,
+        maxStars: cert.maxStars,
+        pct: cert.pct,
+        preScore,
+        postScore,
+        corrected,
+        scenariosCompleted: Object.keys(completed).length,
+        scenariosTotal: SCENARIOS.length,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="flex h-full w-full items-center justify-center overflow-y-auto bg-[#07090d] px-6 py-8">
@@ -112,9 +137,26 @@ export default function CertificateScreen() {
           </div>
         )}
 
+        {/* Download as a real, shareable PDF artifact */}
+        <div className="mt-6 flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Your name (for the certificate)"
+            className="w-full max-w-xs rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:border-twin-cyan/60 focus:outline-none sm:w-56"
+          />
+          <button
+            onClick={downloadPdf}
+            disabled={saving}
+            className="w-full rounded-lg border border-amber-600/60 bg-amber-500/15 px-5 py-2 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/25 disabled:opacity-60 sm:w-auto"
+          >
+            {saving ? "Generating…" : "⬇ Download certificate (PDF)"}
+          </button>
+        </div>
+
         <button
           onClick={backToSelect}
-          className="mt-6 rounded-lg border border-slate-700 px-5 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
+          className="mt-4 rounded-lg border border-slate-700 px-5 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
         >
           Back to scenarios
         </button>

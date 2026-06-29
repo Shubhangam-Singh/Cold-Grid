@@ -19,6 +19,8 @@ export default function MapLegend() {
   const toggleHeatmap = useColdgridStore((s) => s.toggleHeatmap);
   const showLabels = useColdgridStore((s) => s.showLabels);
   const toggleLabels = useColdgridStore((s) => s.toggleLabels);
+  const showUHI = useColdgridStore((s) => s.showUHI);
+  const toggleUHI = useColdgridStore((s) => s.toggleUHI);
 
   return (
     <div className="pointer-events-none w-72 rounded-xl glass-panel p-4 animate-slide-up flex-shrink-0">
@@ -26,7 +28,19 @@ export default function MapLegend() {
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
           Legend
         </span>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <button
+            onClick={toggleUHI}
+            aria-pressed={showUHI}
+            title="Urban Heat Island — warmer dense-concrete zones vs cooler water/green"
+            className={`pointer-events-auto rounded-md px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-twin-cyan ${
+              showUHI
+                ? "bg-orange-500/20 text-orange-300"
+                : "bg-slate-800/60 text-slate-300 hover:bg-slate-700/60"
+            }`}
+          >
+            🌡 UHI {showUHI ? "on" : "off"}
+          </button>
           <button
             onClick={toggleLabels}
             aria-pressed={showLabels}
@@ -67,6 +81,27 @@ export default function MapLegend() {
             <span>low</span>
             <span>high</span>
           </div>
+        </div>
+      )}
+
+      {showUHI && (
+        <div className="mb-3">
+          <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.18em] text-orange-300">
+            Urban heat island
+          </div>
+          <div className="flex overflow-hidden rounded-full border border-slate-700/50">
+            {["#fee08b", "#fdae61", "#f46d43", "#d73027", "#a50026"].map((c, i) => (
+              <div key={i} className="h-2 flex-1" style={{ backgroundColor: c }} />
+            ))}
+          </div>
+          <div className="mt-1 flex justify-between font-mono text-[9px] text-slate-500">
+            <span>cooler · water/green</span>
+            <span>hotter · concrete</span>
+          </div>
+          <p className="mt-2 text-[10px] leading-snug text-slate-400">
+            Chennai&apos;s urban heat island adds 3–5 °C above regional ambient in dense zones —
+            directly accelerating decay rates in your simulation.
+          </p>
         </div>
       )}
 
