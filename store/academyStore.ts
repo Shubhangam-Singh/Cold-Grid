@@ -18,6 +18,7 @@ import { type ScenarioScore, scoreScenario } from "@/lib/academy/scoring";
 import { scoreQuiz } from "@/lib/academy/assessment";
 import type { DeliveryDecision } from "@/lib/academy/types";
 import { useColdgridStore } from "./coldgridStore";
+import { useLearningStore } from "./learningStore";
 
 export type AcademyPhase =
   | "select"
@@ -147,6 +148,8 @@ export const useAcademyStore = create<AcademyState>((set, get) => ({
     const { scenarioId, score, completed, phase } = get();
     if (phase !== "running" || !scenarioId || !score) return;
     useColdgridStore.getState().pause();
+    // First win (a passing 2★+) pops the EMA thermal-memory concept card.
+    if (score.stars >= 2) useLearningStore.getState().trigger("ema");
     const prev = completed[scenarioId];
     const best =
       !prev || score.composite > prev.composite

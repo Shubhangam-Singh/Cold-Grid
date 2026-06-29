@@ -22,6 +22,8 @@ import WeatherWidget from "./WeatherWidget";
 import TrackingCard from "./TrackingCard";
 import MobileControlDock from "./MobileControlDock";
 import HeldShipmentsPanel from "./HeldShipmentsPanel";
+import ConceptWatcher from "@/components/learning/ConceptWatcher";
+import ConceptPopup from "@/components/learning/ConceptPopup";
 
 const DeckMap = dynamic(() => import("./DeckMap"), {
   ssr: false,
@@ -71,6 +73,8 @@ export default function TwinScreen() {
       <DecisionDialog />
       <RouteSelectionModal />
       <TrackingCard />
+      <ConceptWatcher />
+      <ConceptPopup />
     </div>
   );
 }

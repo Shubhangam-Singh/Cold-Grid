@@ -20,6 +20,12 @@ export default function Home() {
             13.0827° N · 80.2707° E · Tamil Nadu
           </span>
           <Link
+            href="/citizen"
+            className="shrink-0 rounded-md border border-twin-emerald/40 bg-twin-emerald/10 px-2.5 sm:px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-twin-emerald transition-all duration-300 hover:scale-105 hover:bg-twin-emerald/20"
+          >
+            Citizen →
+          </Link>
+          <Link
             href="/hardware"
             className="shrink-0 rounded-md border border-slate-600/50 bg-slate-800/40 px-2.5 sm:px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-slate-300 transition-all duration-300 hover:scale-105 hover:bg-slate-700/50 hover:text-white"
           >

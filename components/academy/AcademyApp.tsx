@@ -19,6 +19,8 @@ import QuizModal from "@/components/learning/QuizModal";
 import SimulationClock from "@/components/twin/SimulationClock";
 import MapLegend from "@/components/twin/MapLegend";
 import ShipmentPanel from "@/components/twin/ShipmentPanel";
+import ConceptWatcher from "@/components/learning/ConceptWatcher";
+import ConceptPopup from "@/components/learning/ConceptPopup";
 import { SPEEDS } from "@/store/coldgridStore";
 
 const DeckMap = dynamic(() => import("@/components/twin/DeckMap"), {
@@ -131,6 +133,9 @@ export default function AcademyApp() {
         )}
         {phase === "result" && <ResultScreen />}
       </div>
+
+      <ConceptWatcher />
+      <ConceptPopup />
     </main>
   );
 }

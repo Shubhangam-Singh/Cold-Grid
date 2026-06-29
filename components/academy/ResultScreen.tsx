@@ -6,16 +6,18 @@
  * loop (spec §7.1).
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { SCENARIOS, getScenario } from "@/lib/academy/scenarios";
 import { certificationLevel } from "@/lib/academy/scoring";
 import { useAcademyStore } from "@/store/academyStore";
 import { getProduce } from "@/lib/engine/produce";
+import { DRIVERS } from "@/lib/engine/drivers";
 import { qualityToRgb, rgbCss } from "@/components/twin/colors";
-import type { DeliveryResult } from "@/lib/academy/run";
+import { simulateScenario, type DeliveryResult } from "@/lib/academy/run";
 import { buildCausalChain, type CausalChain } from "@/lib/academy/causal";
 import CausalModal from "./CausalModal";
+import BeforeAfterMap from "./BeforeAfterMap";
 import Stars from "./Stars";
 
 // Lazy — pulls in recharts only when a decay curve is actually opened.
@@ -40,6 +42,21 @@ export default function ResultScreen() {
 
   const [curve, setCurve] = useState<DeliveryResult | null>(null);
   const [causal, setCausal] = useState<CausalChain | null>(null);
+
+  // "Before" baseline: same deliveries, but ambient trucks (no cold-chain calls).
+  const beforeResults = useMemo(() => {
+    if (!scenarioId) return [];
+    const scn = getScenario(scenarioId);
+    const baseline = scn.requiredDeliveries.map((d) => ({
+      deliveryId: d.id,
+      dispatched: true,
+      reefer: false,
+      setpointC: 4,
+      driverId: DRIVERS[0].id,
+      routeStrategy: "fastest" as const,
+    }));
+    return simulateScenario(scn, baseline).results;
+  }, [scenarioId]);
 
   if (!scenarioId || !results || !score) return null;
   const scenario = getScenario(scenarioId);
@@ -147,6 +164,9 @@ export default function ResultScreen() {
             );
           })}
         </ul>
+
+        {/* Before & After Analysis */}
+        <BeforeAfterMap scenario={scenario} before={beforeResults} after={results} />
 
         {/* What you learned */}
         <div className="mt-4 rounded-lg border border-sky-900/60 bg-sky-950/30 p-3">
