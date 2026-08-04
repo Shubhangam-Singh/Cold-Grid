@@ -7,7 +7,7 @@
  * basemap (RULE 3).
  */
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import DeckGL from "@deck.gl/react";
 import { PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import { TripsLayer } from "@deck.gl/geo-layers";
@@ -37,6 +37,16 @@ import {
 } from "@/lib/engine/spoilage";
 import { getProduce } from "@/lib/engine/produce";
 import { useColdgridStore } from "@/store/coldgridStore";
+import {
+  EMPTY_LABEL_LAYOUT,
+  LABEL_FADE_MS,
+  LABEL_FONT_SIZE_PX,
+  LABEL_PADDING_X,
+  LABEL_PADDING_Y,
+  defaultPlacement,
+  layoutLabels,
+  type LabelLayout,
+} from "@/lib/map/labelLayout";
 import { NODE_TYPE_STYLE, qualityToRgb, rgbCss, tempToRgb } from "./colors";
 
 const CARTO_DARK =
@@ -54,6 +64,23 @@ const INITIAL_VIEW_STATE = {
 };
 
 const MONO = "var(--font-mono), monospace";
+
+/**
+ * How often the label layout is recomputed while the operator pans or zooms.
+ * Throttled (with a trailing pass) so labels reflow visibly during the gesture
+ * without rebuilding the layer stack on every pointer event.
+ */
+const LABEL_RELAYOUT_MS = 60;
+
+interface ViewSnapshot {
+  longitude: number;
+  latitude: number;
+  zoom: number;
+}
+
+/** Full-opacity alpha of a visible label and its background plate. */
+const LABEL_TEXT_ALPHA = 235;
+const LABEL_BACKGROUND_ALPHA = 190;
 
 interface RouteDatum {
   path: [number, number][];
@@ -158,15 +185,106 @@ export default function DeckMap() {
     }
   }, []);
 
-  // Global time loop for pulsing TripsLayer (0 to 100)
+  // ── Zoom-tiered label decluttering ─────────────────────────────────────────
+  // The layout needs the real canvas size (the map is not the full window on
+  // desktop) plus the live view state, both captured from DeckGL below.
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const [viewSnapshot, setViewSnapshot] = useState<ViewSnapshot>({
+    longitude: INITIAL_VIEW_STATE.longitude,
+    latitude: INITIAL_VIEW_STATE.latitude,
+    zoom: INITIAL_VIEW_STATE.zoom,
+  });
+  const pendingViewRef = useRef<ViewSnapshot>(viewSnapshot);
+  const lastRelayoutRef = useRef(0);
+  const relayoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleRelayout = useCallback(() => {
+    const commit = () => {
+      lastRelayoutRef.current = Date.now();
+      setViewSnapshot({ ...pendingViewRef.current });
+    };
+    // Leading edge, then a trailing pass so the final resting view is exact.
+    if (Date.now() - lastRelayoutRef.current >= LABEL_RELAYOUT_MS) commit();
+    if (relayoutTimerRef.current) clearTimeout(relayoutTimerRef.current);
+    relayoutTimerRef.current = setTimeout(commit, LABEL_RELAYOUT_MS);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (relayoutTimerRef.current) clearTimeout(relayoutTimerRef.current);
+    },
+    []
+  );
+
+  const labelLayout = useMemo<LabelLayout>(() => {
+    if (!showLabels || canvasSize.width <= 0 || canvasSize.height <= 0) {
+      return EMPTY_LABEL_LAYOUT;
+    }
+    const viewport = new WebMercatorViewport({
+      ...viewSnapshot,
+      width: canvasSize.width,
+      height: canvasSize.height,
+    });
+    return layoutLabels({
+      nodes,
+      viewport,
+      zoom: viewSnapshot.zoom,
+      glyphRadiusPx: (n) => NODE_TYPE_STYLE[n.type].radiusPx,
+    });
+  }, [showLabels, canvasSize, viewSnapshot, nodes]);
+
+  // Stable identity for the layout, so deck.gl only re-evaluates the label
+  // accessors when the visible set or an anchor actually changed.
+  const labelLayoutKey = useMemo(
+    () =>
+      Array.from(labelLayout.entries())
+        .map(([id, p]) => `${id}:${p.anchor}:${p.baseline}:${p.offset.join(",")}`)
+        .sort()
+        .join("|"),
+    [labelLayout]
+  );
+
+  // Live refs so the animation loop can read the newest layout without being
+  // torn down and restarted every time the operator pans.
+  const labelLayoutRef = useRef<LabelLayout>(labelLayout);
+  labelLayoutRef.current = labelLayout;
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+
+  // Per-label opacity, eased on the CPU. deck.gl's own attribute transitions
+  // cannot be used here: the layer stack is rebuilt every animation frame, and
+  // each rebuild restarts the tween before it has a chance to finish.
+  const labelAlphaRef = useRef<Record<string, number>>({});
+  const [labelFadeTick, setLabelFadeTick] = useState(0);
+
+  // Global time loop: pulses the TripsLayer (0 to 100) and eases label opacity.
   const [time, setTime] = useState(0);
   useEffect(() => {
     let animationFrame: number;
+    let previous = performance.now();
     const animate = () => {
+      const now = performance.now();
+      const step = Math.min(1, (now - previous) / LABEL_FADE_MS);
+      previous = now;
+
+      const alphas = labelAlphaRef.current;
+      let faded = false;
+      for (const node of nodesRef.current) {
+        const target = labelLayoutRef.current.has(node.id) ? 1 : 0;
+        const current = alphas[node.id] ?? 0;
+        if (current === target) continue;
+        alphas[node.id] =
+          target > current
+            ? Math.min(target, current + step)
+            : Math.max(target, current - step);
+        faded = true;
+      }
+      if (faded) setLabelFadeTick((t) => (t + 1) % 1000);
+
       setTime((t) => (t + 1) % 100);
       animationFrame = requestAnimationFrame(animate);
     };
-    animate();
+    animationFrame = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationFrame);
   }, []);
 
@@ -392,22 +510,41 @@ export default function DeckMap() {
     // Trucks are now rendered as HTML overlays via TruckMarker (below).
     // No deck.gl IconLayer or halo ScatterplotLayer for shipments.
 
+    // Labels are zoom-tiered and collision-resolved by lib/map/labelLayout.
+    // Every node stays in the layer; hidden ones sit at zero alpha so the
+    // eased opacity above can fade them in and out instead of popping.
+    const placementFor = (n: CityNode) =>
+      labelLayout.get(n.id) ?? defaultPlacement(NODE_TYPE_STYLE[n.type].radiusPx);
+    const alphaFor = (n: CityNode) => labelAlphaRef.current[n.id] ?? 0;
+
     const labelLayer = new TextLayer<CityNode>({
       id: "labels",
       data: nodes,
       getPosition: (n) => n.coordinates,
       getText: (n) => n.name,
-      getColor: [226, 232, 240, 235],
-      getSize: 11,
+      getColor: (n) => [226, 232, 240, Math.round(LABEL_TEXT_ALPHA * alphaFor(n))],
+      getSize: LABEL_FONT_SIZE_PX,
       sizeUnits: "pixels",
       fontFamily: "monospace",
       fontWeight: 500,
-      getTextAnchor: "middle",
-      getAlignmentBaseline: "top",
-      getPixelOffset: (n) => [0, NODE_TYPE_STYLE[n.type].radiusPx + 6],
+      getTextAnchor: (n) => placementFor(n).anchor,
+      getAlignmentBaseline: (n) => placementFor(n).baseline,
+      getPixelOffset: (n) => placementFor(n).offset,
       background: true,
-      getBackgroundColor: [2, 6, 23, 190],
-      backgroundPadding: [5, 3],
+      getBackgroundColor: (n) => [
+        2,
+        6,
+        23,
+        Math.round(LABEL_BACKGROUND_ALPHA * alphaFor(n)),
+      ],
+      backgroundPadding: [LABEL_PADDING_X, LABEL_PADDING_Y],
+      updateTriggers: {
+        getColor: [labelFadeTick],
+        getBackgroundColor: [labelFadeTick],
+        getTextAnchor: [labelLayoutKey],
+        getAlignmentBaseline: [labelLayoutKey],
+        getPixelOffset: [labelLayoutKey],
+      },
       pickable: false,
     });
 
@@ -518,7 +655,9 @@ export default function DeckMap() {
       rerouteLayer,
       routeTraveled, routeAhead, routeTrips,
       destPulseLayer, nodeLayer,
-      ...(showLabels ? [labelLayer] : []),
+      // Always mounted: the manual toggle empties the layout instead of
+      // unmounting the layer, so "labels off" fades out rather than snapping.
+      labelLayer,
     ];
     // Heat overlays render UNDER the network (prepended = bottom of the stack).
     const overlays = [];
@@ -534,6 +673,9 @@ export default function DeckMap() {
     riskData,
     showHeatmap,
     showLabels,
+    labelLayout,
+    labelLayoutKey,
+    labelFadeTick,
     showUHI,
     inTransit,
     hourOfDay,
@@ -558,7 +700,21 @@ export default function DeckMap() {
         layers={layers}
         onViewStateChange={({ viewState }) => {
           viewportRef.current = new WebMercatorViewport(viewState as ConstructorParameters<typeof WebMercatorViewport>[0]);
+          const v = viewState as ViewSnapshot;
+          pendingViewRef.current = {
+            longitude: v.longitude,
+            latitude: v.latitude,
+            zoom: v.zoom,
+          };
+          scheduleRelayout();
         }}
+        onResize={({ width, height }) =>
+          setCanvasSize((prev) =>
+            prev.width === width && prev.height === height
+              ? prev
+              : { width, height }
+          )
+        }
         getCursor={({ isHovering }) => (isHovering ? "pointer" : "grab")}
         getTooltip={(info: PickingInfo) => {
           if (!info.object) return null;

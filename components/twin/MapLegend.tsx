@@ -44,7 +44,7 @@ export default function MapLegend() {
           <button
             onClick={toggleLabels}
             aria-pressed={showLabels}
-            title="Show or hide map location names"
+            title="Override map location names. When on, labels are shown by importance and decluttered as you zoom; when off, all labels are hidden."
             className={`pointer-events-auto rounded-md px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-twin-cyan ${
               showLabels
                 ? "bg-twin-cyan/20 text-twin-cyan"
