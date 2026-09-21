@@ -39,7 +39,7 @@ export default function DecayCurveModal({ history, produce, title, onClose }: De
   const stressC = profile.thermalStressK - KELVIN;
 
   // effTemp = remembered thermal stress: Tstress + EMA·10 (°C). Lags the raw
-  // cargo temperature — that lag IS the patented thermal memory.
+  // cargo temperature — that lag IS thermal memory.
   const data = history.map((p) => ({
     t: Number(p.ageHours.toFixed(2)),
     quality: Number(p.quality.toFixed(1)),
@@ -198,7 +198,7 @@ export default function DecayCurveModal({ history, produce, title, onClose }: De
             </div>
             <p className="mt-3 border-t border-slate-800 pt-3 text-xs leading-relaxed text-slate-400">
               The orange <span className="text-orange-400">EMA effective temperature</span> lags the
-              grey cargo temperature — that lag is the patented <em>thermal memory</em>: heat
+              grey cargo temperature — that lag is <em>thermal memory</em>: heat
               exposure keeps driving spoilage even after the cargo is re-cooled. Quality falls fastest
               while the effective temperature is high.
             </p>

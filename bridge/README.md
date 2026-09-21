@@ -2,10 +2,10 @@
 
 A ~70-line Python bridge that reads the **PPSC smart cart's** serial output
 (DHT22 temperature/humidity + MQ-135 gas) and rebroadcasts it as JSON over a
-local WebSocket. The ColdGrid app subscribes to it **only** when
+local WebSocket. The ColdGrid fleet monitor subscribes to it **only** when
 `NEXT_PUBLIC_ENABLE_HARDWARE=true` and maps the live readings onto one designated
-node (Kasimedu) — so the twin shows the model's **predicted** shelf life against
-the cart's **actual** sensor data in real time.
+node (Kasimedu) — predicted shelf life against the cart's **actual** sensor data
+in real time.
 
 > Fully optional and free. With the flag off (the default), the app uses
 > synthetic data and never connects here. No cloud, no keys, no real money.

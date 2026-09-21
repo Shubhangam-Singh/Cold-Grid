@@ -30,7 +30,7 @@ const DeckMap = dynamic(() => import("./DeckMap"), {
   loading: () => (
     <div className="flex h-full w-full items-center justify-center bg-[#07090d]">
       <span className="font-mono text-xs uppercase tracking-[0.2em] text-slate-500">
-        Loading Chennai twin…
+        Loading fleet map…
       </span>
     </div>
   ),

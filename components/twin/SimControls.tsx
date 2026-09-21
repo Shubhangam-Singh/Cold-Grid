@@ -135,7 +135,7 @@ export default function SimControls() {
       </div>
 
       <div className="mt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
-        Quick dispatch
+        Dispatch truck
       </div>
       <div className="mt-1.5 space-y-1.5">
         {PRESETS.map((d) => (
@@ -154,7 +154,7 @@ export default function SimControls() {
         className="mt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-twin-cyan hover:text-white transition-colors duration-300"
         aria-expanded={showCustom}
       >
-        {showCustom ? "▾ Custom dispatch" : "▸ Custom dispatch"}
+        {showCustom ? "▾ Custom truck" : "▸ Custom truck"}
       </button>
 
       {showCustom && (
@@ -237,7 +237,7 @@ export default function SimControls() {
             disabled={!canDispatch}
             className="w-full rounded-md bg-twin-cyan/20 border border-twin-cyan/50 px-3 py-2 text-xs font-bold text-twin-cyan transition-all duration-300 hover:bg-twin-cyan/40 hover:shadow-[0_0_15px_rgba(0,240,255,0.4)] hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-twin-cyan disabled:cursor-not-allowed disabled:bg-slate-800/50 disabled:border-slate-700 disabled:text-slate-500 disabled:hover:scale-100 disabled:hover:shadow-none"
           >
-            Dispatch
+            Dispatch truck
           </button>
         </div>
       )}

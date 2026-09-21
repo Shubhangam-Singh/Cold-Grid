@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import CitizenMode from "@/components/learning/CitizenMode";
+import BrandByline from "@/components/BrandByline";
 
 export const metadata: Metadata = {
   title: "ColdGrid — Citizen Mode",
@@ -18,9 +19,10 @@ export default function CitizenPage() {
               Citizen Mode
             </div>
             <h1 className="mt-1 text-2xl font-bold text-slate-100">No dials. No jargon. One choice.</h1>
+            <BrandByline className="mt-2" />
           </div>
           <Link href="/" className="font-mono text-[11px] text-slate-500 transition hover:text-twin-cyan">
-            ← Twin
+            ← Fleet
           </Link>
         </div>
       </div>
@@ -30,8 +32,8 @@ export default function CitizenPage() {
       </div>
 
       <p className="mx-auto mt-6 max-w-lg text-center text-[11px] leading-relaxed text-slate-600">
-        Same physics as the operator twin — the patented PPSC Adaptive Arrhenius + EMA engine — just
-        with everything but the one decision that matters hidden away.
+        Same spoilage physics as the fleet monitor — just with everything but the one
+        decision that matters hidden away.
       </p>
     </main>
   );

@@ -75,7 +75,15 @@ export function baseRate(T_K: number, EaEff: number, p: ProduceProfile): number 
  * with excess humidity. NEVER moved inside the Arrhenius exponent (RULE 2).
  */
 export function humidityMultiplier(RH: number, p: ProduceProfile): number {
-  return 1 + p.betaRate * Math.max(0, (RH - p.rhRef) / p.sRh);
+  const excess = Math.max(0, (RH - p.rhRef) / p.sRh);
+  let H = 1 + p.betaRate * excess;
+  H = Math.min(H, 1 + p.betaRate); // firmware cap
+  // Leafy veg: desiccation at RH < 60% (PPSC v25 step 7).
+  if (p.id === "leafyVeg" && RH < 60) {
+    const desicc = 1 + 0.3 * (60 - RH) / 20;
+    if (desicc > H) H = desicc;
+  }
+  return H;
 }
 
 /**
@@ -83,7 +91,9 @@ export function humidityMultiplier(RH: number, p: ProduceProfile): number {
  * below vocRef. NEVER moved inside the Arrhenius exponent (RULE 2).
  */
 export function gasMultiplier(VOC: number, p: ProduceProfile): number {
-  return 1 + p.alphaRate * Math.max(0, Math.tanh((VOC - p.vocRef) / p.sVoc));
+  const sigmoid = Math.tanh((VOC - p.vocRef) / p.sVoc);
+  const G = 1 + p.alphaRate * Math.max(0, sigmoid);
+  return Math.min(G, 1 + p.alphaRate); // firmware cap
 }
 
 /**
@@ -170,4 +180,41 @@ export function predictedShelfLifeHours(
 
   const remainingFrac = 1 - batch.cumulativeDeg;
   return (remainingFrac * p.shelfLifeHours) / rate;
+}
+
+/** Live Arrhenius snapshot at the current EMA + sensor reading (PPSC v25). */
+export interface DegradationSnapshot {
+  /** Rate vs 25 °C reference (H=G=1 at ref). */
+  rate: number;
+  H: number;
+  G: number;
+  F: number;
+  EaEff: number;
+  /** Quality points lost per hour at these conditions. */
+  qualityLossPerHour: number;
+  /** Hours to quality 0 if T/RH/VOC and current EMA hold. */
+  remainingHours: number;
+}
+
+export function degradationSnapshot(
+  batch: Batch,
+  p: ProduceProfile,
+  T_C: number,
+  RH: number,
+  VOC: number
+): DegradationSnapshot {
+  const T_K = celsiusToKelvin(T_C);
+  const { F, EaEff } = thermalDerating(batch.ema, p);
+  const br = baseRate(T_K, EaEff, p);
+  const H = humidityMultiplier(RH, p);
+  const G = gasMultiplier(VOC, p);
+  const rate = br * H * G;
+  const remainingFrac = Math.max(0, 1 - batch.cumulativeDeg);
+  const qualityLossPerHour =
+    remainingFrac <= 0 || p.shelfLifeHours <= 0 ? 0 : (rate / p.shelfLifeHours) * 100;
+  let remainingHours = 0;
+  if (remainingFrac > 0) {
+    remainingHours = rate <= 0 ? Infinity : (remainingFrac * p.shelfLifeHours) / rate;
+  }
+  return { rate, H, G, F, EaEff, qualityLossPerHour, remainingHours };
 }

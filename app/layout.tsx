@@ -13,9 +13,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ColdGrid — Chennai Cold-Chain Digital Twin",
+  title: "ColdGrid — PPSC Fleet Monitor",
   description:
-    "A digital twin of Chennai's perishable-food cold chain with an operator training academy, powered by the patented PPSC Adaptive Arrhenius + EMA spoilage engine.",
+    "Live monitoring for reefer trucks carrying PPSC units across Chennai and the surrounding Tamil Nadu region — location, cargo sensors, and remaining shelf life.",
 };
 
 export const viewport: Viewport = {

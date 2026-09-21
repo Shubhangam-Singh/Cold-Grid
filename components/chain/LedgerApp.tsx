@@ -11,6 +11,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import BrandByline from "@/components/BrandByline";
 import {
   DEMO_TERMS,
   buildTrustArc,
@@ -55,9 +56,10 @@ export default function LedgerApp() {
               Trust Layer
             </div>
             <h1 className="mt-1 text-2xl font-bold text-slate-100">Why a tamper-proof cold-chain record matters</h1>
+            <BrandByline className="mt-2" />
           </div>
           <Link href="/" className="font-mono text-[11px] text-slate-500 transition hover:text-twin-cyan">
-            ← Twin
+            ← Fleet
           </Link>
         </div>
 

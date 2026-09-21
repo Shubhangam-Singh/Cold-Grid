@@ -58,6 +58,9 @@ export interface ProduceProfile {
   alphaRate: number;
   vocRef: number;
   sVoc: number;
+
+  /** Cart list price (INR / unit) — PPSC v25 5-tier markdown uses this. */
+  basePriceRs: number;
 }
 
 /** One sampled point of a batch's degradation history (drives the decay-curve viewer). */

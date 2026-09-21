@@ -102,6 +102,6 @@ export const DEMO_SCRIPT: DemoStep[] = [
   {
     atHours: 8.0,
     caption:
-      "ColdGrid — one city's entire cold chain, powered by the patented PPSC Adaptive Arrhenius + EMA engine.",
+      "ColdGrid — live PPSC fleet monitor for Chennai and the surrounding Tamil Nadu region.",
   },
 ];

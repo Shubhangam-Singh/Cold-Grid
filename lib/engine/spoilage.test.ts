@@ -9,6 +9,7 @@ import {
   humidityMultiplier,
   isSpoiled,
   predictedShelfLifeHours,
+  degradationSnapshot,
   stepBatch,
   thermalDerating,
 } from "./spoilage";
@@ -238,5 +239,28 @@ describe("supporting checks", () => {
     expect(tomato.eaBase).toBe(109700);
     expect(fish.eaBase).toBe(82900);
     expect(apple.eaBase).toBe(90000);
+  });
+});
+
+describe("PPSC v25 live deterioration snapshot", () => {
+  it("fresh tomato at 35 °C, ref RH/VOC, EMA=0 has rate ≈ 4.2045", () => {
+    const fresh = createBatch("s", tomato.id);
+    const snap = degradationSnapshot(fresh, tomato, 35, tomato.rhRef, tomato.vocRef);
+    expect(snap.rate).toBeCloseTo(4.2045, 2);
+    expect(snap.H).toBe(1);
+    expect(snap.G).toBe(1);
+    expect(snap.remainingHours).toBeCloseTo(tomato.shelfLifeHours / snap.rate, 6);
+  });
+
+  it("H is capped at 1 + betaRate (firmware)", () => {
+    expect(humidityMultiplier(100, tomato)).toBeCloseTo(1 + tomato.betaRate, 9);
+  });
+
+  it("leafy veg desiccation raises H below 60 %RH", () => {
+    const leafy = getProduce("leafyVeg");
+    const dry = humidityMultiplier(40, leafy);
+    const ok = humidityMultiplier(70, leafy);
+    expect(dry).toBeGreaterThan(ok);
+    expect(dry).toBeCloseTo(1 + 0.3 * (60 - 40) / 20, 9);
   });
 });

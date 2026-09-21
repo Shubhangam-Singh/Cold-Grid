@@ -9,6 +9,8 @@ import { useMemo } from "react";
 import { useColdgridStore } from "@/store/coldgridStore";
 import { fleetMetrics } from "@/lib/academy/metrics";
 import { totalHubFeesRupees } from "@/lib/logistics/hubHold";
+import { getProduce } from "@/lib/engine/produce";
+import { KELVIN } from "@/lib/engine/spoilage";
 
 function formatHour(hour: number): string {
   const h = Math.floor(hour) % 24;
@@ -29,6 +31,15 @@ export default function MetricsBar() {
   const hubFeesPaidRupees = useColdgridStore((s) => s.hubFeesPaidRupees);
   const clockHours = useColdgridStore((s) => s.sim.clockHours);
   const m = useMemo(() => fleetMetrics(shipments), [shipments]);
+  const ppscAlerts = useMemo(
+    () =>
+      shipments.filter((s) => {
+        if (s.status !== "in-transit") return false;
+        const ceilingC = getProduce(s.produce).thermalStressK - KELVIN;
+        return s.batch.quality <= 50 || s.lastTempC > ceilingC;
+      }).length,
+    [shipments]
+  );
 
   const held = Object.values(heldShipments);
   const incompleteCount = held.length;
@@ -37,7 +48,13 @@ export default function MetricsBar() {
   return (
     <div className="relative z-40 flex flex-nowrap items-center justify-start gap-3 overflow-x-auto no-scrollbar px-3 py-2 lg:flex-wrap lg:justify-center lg:gap-x-4 lg:gap-y-3 lg:px-5 lg:py-3 bg-gradient-to-b from-slate-900/60 to-transparent shadow-[0_4px_30px_rgba(0,0,0,0.3)] backdrop-blur-sm border-b border-white/5">
       <Kpi label="Clock" value={formatHour(hourOfDay)} icon="⏱" />
-      <Kpi label="In transit" value={String(m.inTransit)} accent="text-twin-cyan text-glow" icon="🚚" />
+      <Kpi label="Trucks live" value={String(m.inTransit)} accent="text-twin-cyan text-glow" icon="🚚" />
+      <Kpi
+        label="PPSC alerts"
+        value={String(ppscAlerts)}
+        accent={ppscAlerts > 0 ? "text-twin-danger text-glow animate-pulse-slow" : undefined}
+        icon="📟"
+      />
       <Kpi label="Delivered" value={String(m.delivered)} icon="📦" />
       <Kpi label="Spoiled" value={String(m.spoiled)} accent={m.spoiled > 0 ? "text-twin-danger text-glow animate-pulse-slow" : undefined} icon="⚠️" />
       <Kpi label="Food saved" value={m.foodSavedPct == null ? "—" : `${m.foodSavedPct.toFixed(0)}%`} accent="text-twin-emerald text-glow" icon="🌱" />
