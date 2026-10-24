@@ -228,6 +228,29 @@ describe("purity (no input mutation)", () => {
     expect(next.tick).toBe(s.tick + 1);
   });
 
+  it("a live probe replaces route ambient on that truck only", () => {
+    let s = createSimulation(7);
+    s = dispatchShipment(s, { produce: "tomato", fromId: "koyambedu", toId: "t-nagar" });
+    s = dispatchShipment(s, { produce: "fish", fromId: "kasimedu", toId: "mylapore" });
+    expect(s.shipments).toHaveLength(2);
+    const tomatoId = s.shipments[0].id;
+    const before = s.shipments[0].lastTempC;
+    const plain = stepSimulation(s, 0.05);
+    const probed = stepSimulation(s, 0.05, {
+      [tomatoId]: { T_C: 24.6, RH: 75, VOC: 246 },
+    });
+
+    expect(probed.shipments[0].lastTempC).toBe(24.6);
+    expect(probed.shipments[0].lastRH).toBe(75);
+    expect(probed.shipments[0].lastVOC).toBe(246);
+    expect(probed.shipments[0].produce).toBe("tomato");
+    expect(probed.shipments[1].lastTempC).toBe(plain.shipments[1].lastTempC);
+    expect(probed.shipments[1].lastRH).toBe(plain.shipments[1].lastRH);
+    expect(probed.shipments[1].lastVOC).toBe(plain.shipments[1].lastVOC);
+    expect(plain.shipments[0].lastTempC).not.toBe(24.6);
+    expect(s.shipments[0].lastTempC).toBe(before);
+  });
+
   it("advanceShipment returns a new shipment and leaves a delivered one fixed", () => {
     let s = createSimulation(1);
     s = dispatchShipment(s, { produce: "fish", fromId: "kasimedu", toId: "mylapore" });

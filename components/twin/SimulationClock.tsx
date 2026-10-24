@@ -17,6 +17,8 @@
 import { useEffect, useRef } from "react";
 import { TICK_INTERVAL_MS, useColdgridStore } from "@/store/coldgridStore";
 import { SIM_DT_HOURS } from "@/lib/engine/simulation";
+import { liveCargoSensors } from "@/lib/hardware/fleetOverlay";
+import { useLiveHardwareStore } from "@/store/liveHardwareStore";
 import { useAcademyStore } from "@/store/academyStore";
 import { getScenario } from "@/lib/academy/scenarios";
 import { createCrisis } from "@/lib/engine/crisisEvents";
@@ -45,7 +47,16 @@ export default function SimulationClock() {
 
     const id = setInterval(() => {
       const store = useColdgridStore.getState();
-      store.advance(dtHours);
+      const cart = useLiveHardwareStore.getState();
+      const live = liveCargoSensors({
+        listen: cart.listen,
+        connected: cart.connected,
+        session: cart.session,
+        nowMs: Date.now(),
+        shipments: store.sim.shipments,
+        attachFish: cart.attachToFleet,
+      });
+      store.advance(dtHours, live);
 
       // ── 1. Release halted trucks whose repair time has elapsed in sim-time ──
       // (sim-clock-driven; no wall-clock setTimeout for this any more)

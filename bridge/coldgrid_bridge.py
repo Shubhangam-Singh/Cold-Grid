@@ -8,31 +8,74 @@ Optional + free: with the flag off the app uses synthetic data and never
 connects here. No cloud, no keys, no real money.
 
   pip install -r requirements.txt
-  python coldgrid_bridge.py --port COM3 --baud 9600 --ws 8765
+  python coldgrid_bridge.py --port COM12 --ws 8765
   python coldgrid_bridge.py --mock          # no hardware needed (synthetic warming trace)
 
-The cart is expected to print lines like:  T=31.4,H=78,G=240
-(temperature C, relative humidity %, gas/VOC index). Unparseable lines are ignored.
+Firmware (115200 baud) prints:  [SENS] T=31.4 H=78 VOC=240 raw=412 ADP PM=A Rt=1.023
+The older T=31.4,H=78,G=240 form is accepted too. Other lines are ignored.
 """
 import argparse
 import asyncio
 import json
 import math
-import re
+import subprocess
+import threading
 import time
+from pathlib import Path
+
+from parse_reading import parse_line
 
 try:
     import websockets
 except ImportError:
     raise SystemExit("Missing dependency. Run:  pip install -r requirements.txt")
 
-# Pulls T=, H=, G= out of a line in any order/format.
-LINE_RE = re.compile(
-    r"T\s*=\s*(-?\d+(?:\.\d+)?).*?H\s*=\s*(-?\d+(?:\.\d+)?).*?G\s*=\s*(-?\d+(?:\.\d+)?)",
-    re.IGNORECASE,
-)
-
 clients = set()
+chain_proc: subprocess.Popen | None = None
+
+
+def start_chain_poster() -> subprocess.Popen | None:
+    """Optional local-chain writer. A failure here must not stop the websocket."""
+    script = Path(__file__).with_name("chain_poster.mjs")
+    try:
+        proc = subprocess.Popen(
+            ["node", str(script)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+    except OSError as exc:
+        print(f"[chain] poster not started: {exc}")
+        return None
+
+    def pump() -> None:
+        if proc.stdout is None:
+            return
+        for line in proc.stdout:
+            print(line.rstrip(), flush=True)
+
+    threading.Thread(target=pump, daemon=True).start()
+    print("[chain] poster started (local node only)")
+    return proc
+
+
+def forward_chain(reading: dict) -> None:
+    proc = chain_proc
+    if proc is None or proc.poll() is not None or proc.stdin is None:
+        return
+    try:
+        proc.stdin.write(json.dumps(reading) + "\n")
+        proc.stdin.flush()
+    except OSError as exc:
+        print(f"[chain] write failed: {exc}")
+
+
+async def publish(reading: dict) -> None:
+    print(json.dumps(reading), flush=True)
+    forward_chain(reading)
+    await broadcast(reading)
 
 
 async def broadcast(payload: dict) -> None:
@@ -50,18 +93,6 @@ async def handler(ws, *_) -> None:  # *_ tolerates the older (ws, path) signatur
         clients.discard(ws)
 
 
-def parse_line(text: str):
-    m = LINE_RE.search(text)
-    if not m:
-        return None
-    return {
-        "tempC": float(m.group(1)),
-        "humidity": float(m.group(2)),
-        "gas": float(m.group(3)),
-        "at": time.time(),
-    }
-
-
 async def serial_reader(port: str, baud: float) -> None:
     import serial  # pyserial, imported lazily so --mock needs no hardware libs
 
@@ -73,7 +104,7 @@ async def serial_reader(port: str, baud: float) -> None:
         text = raw.decode("utf-8", "ignore").strip()
         reading = parse_line(text)
         if reading:
-            await broadcast(reading)
+            await publish(reading)
 
 
 async def mock_reader() -> None:
@@ -82,14 +113,13 @@ async def mock_reader() -> None:
     t = 0.0
     while True:
         temp = 6 + 24 * (0.5 - 0.5 * math.cos(t / 8))  # 6 -> 30 -> 6 C
-        await broadcast(
-            {
-                "tempC": round(temp, 1),
-                "humidity": round(70 + 10 * math.sin(t / 5), 1),
-                "gas": round(180 + temp * 4, 1),
-                "at": time.time(),
-            }
-        )
+        reading = {
+            "tempC": round(temp, 1),
+            "humidity": round(70 + 10 * math.sin(t / 5), 1),
+            "gas": round(180 + temp * 4, 1),
+            "at": time.time(),
+        }
+        await publish(reading)
         t += 1
         await asyncio.sleep(1)
 
@@ -97,10 +127,19 @@ async def mock_reader() -> None:
 async def main() -> None:
     p = argparse.ArgumentParser(description="ColdGrid hardware bridge (serial -> websocket)")
     p.add_argument("--port", help="serial port, e.g. COM3 or /dev/ttyUSB0")
-    p.add_argument("--baud", type=float, default=9600)
+    p.add_argument("--baud", type=int, default=115200, help="serial baud (firmware uses 115200)")
     p.add_argument("--ws", type=int, default=8765, help="websocket port")
     p.add_argument("--mock", action="store_true", help="emit synthetic data (no hardware)")
+    p.add_argument(
+        "--chain",
+        action="store_true",
+        help="also post to a local Hardhat ColdChainAttestation (never mainnet)",
+    )
     args = p.parse_args()
+
+    global chain_proc
+    if args.chain:
+        chain_proc = start_chain_poster()
 
     async with websockets.serve(handler, "0.0.0.0", args.ws):
         print(f"[bridge] websocket on ws://localhost:{args.ws}")

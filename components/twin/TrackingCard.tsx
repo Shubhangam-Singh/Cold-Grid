@@ -14,6 +14,7 @@ import { getProduce } from "@/lib/engine/produce";
 import { getDriver } from "@/lib/engine/drivers";
 import { getNode, getEdge } from "@/lib/city/chennai";
 import { ppscUnitId } from "@/lib/hardware/ppsc";
+import { useFleetCart } from "@/components/hardware/useFleetCart";
 import { recommendSellPrice } from "@/lib/engine/pricing";
 import { qualityToRgb, rgbCss } from "./colors";
 import CargoHealth from "./CargoHealth";
@@ -104,16 +105,22 @@ function TruckTrackPanel({
   onMinimize: () => void;
   onExpand: () => void;
 }) {
+  const cart = useFleetCart(shipment.id);
   const produce = getProduce(shipment.produce);
   const driver = getDriver(shipment.driverId);
   const origin = getNode(shipment.originId);
   const dest = getNode(shipment.destinationId);
-  const q = shipment.batch.quality;
+  const tempC = cart?.tempC ?? shipment.lastTempC;
+  const rh = cart?.rh ?? shipment.lastRH;
+  const voc = cart?.voc ?? shipment.lastVOC;
+  const q = cart?.quality ?? shipment.batch.quality;
+  const viewBatch = cart?.batch ?? shipment.batch;
   const qColor = rgbCss(qualityToRgb(q));
   const emoji = PRODUCE_EMOJI[shipment.produce] ?? "📦";
   const qualityBarColor = q > 70 ? "#22c55e" : q > 40 ? "#f59e0b" : "#ef4444";
   const unit = ppscUnitId(shipment.id);
   const quote = recommendSellPrice({ produce: shipment.produce, qualityPct: q });
+  const sellMark = useColdgridStore((s) => s.sellMarks[shipment.id]);
   const transportBadge =
     shipment.transportSetpointC != null
       ? `❄ Reefer ${shipment.transportSetpointC}°C`
@@ -191,7 +198,9 @@ function TruckTrackPanel({
           <div className="ml-3 flex shrink-0 items-center gap-1.5">
             <div className="flex items-center gap-1.5 rounded-full border border-red-800/50 bg-red-950/60 px-2.5 py-1">
               <span className="live-dot" />
-              <span className="text-[10px] font-bold tracking-wider text-red-400">LIVE</span>
+              <span className="text-[10px] font-bold tracking-wider text-red-400">
+                {cart ? "CART" : "LIVE"}
+              </span>
             </div>
             <button
               type="button"
@@ -216,7 +225,7 @@ function TruckTrackPanel({
           <div className="flex-1 rounded-lg bg-slate-800/60 p-2 text-center">
             <div className="text-[9px] uppercase tracking-wide text-slate-500">PPSC °C</div>
             <div className="font-mono text-base font-bold leading-tight" style={{ color: qColor }}>
-              {shipment.lastTempC.toFixed(1)}°
+              {tempC.toFixed(1)}°
             </div>
           </div>
         </div>
@@ -225,13 +234,13 @@ function TruckTrackPanel({
           <div className="flex-1 rounded-lg bg-slate-800/60 p-2 text-center">
             <div className="text-[9px] uppercase tracking-wide text-slate-500">Humidity</div>
             <div className="font-mono text-base font-bold leading-tight text-slate-200">
-              {shipment.lastRH.toFixed(0)}%
+              {rh.toFixed(0)}%
             </div>
           </div>
           <div className="flex-1 rounded-lg bg-slate-800/60 p-2 text-center">
             <div className="text-[9px] uppercase tracking-wide text-slate-500">VOC</div>
             <div className="font-mono text-base font-bold leading-tight text-slate-200">
-              {shipment.lastVOC.toFixed(0)}
+              {voc.toFixed(0)}
             </div>
           </div>
           <div className="flex-1 rounded-lg bg-slate-800/60 p-2 text-center">
@@ -264,10 +273,10 @@ function TruckTrackPanel({
         <div className="mb-3">
           <CargoHealth
             produce={shipment.produce}
-            batch={shipment.batch}
-            T_C={shipment.lastTempC}
-            RH={shipment.lastRH}
-            VOC={shipment.lastVOC}
+            batch={viewBatch}
+            T_C={tempC}
+            RH={rh}
+            VOC={voc}
           />
         </div>
 
@@ -279,7 +288,7 @@ function TruckTrackPanel({
             </span>
           </div>
           <span className="rounded-full bg-slate-800/60 px-2 py-0.5 text-[10px] text-slate-500">
-            {transportBadge}
+            {sellMark ? `Sell ₹${sellMark.rupees}` : transportBadge}
           </span>
         </div>
       </div>

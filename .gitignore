@@ -40,3 +40,6 @@ next-env.d.ts
 msg.txt
 diag-out.txt
 amend_*.py
+
+# FROST sidecar store (audit and memory). Not production telemetry.
+/copilot/data/

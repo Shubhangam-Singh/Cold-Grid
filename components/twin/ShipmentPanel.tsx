@@ -3,12 +3,17 @@
 /**
  * Live fleet roster: each PPSC-equipped truck with GPS, cargo sensors, quality,
  * and status. Click a row to select it on the map / tracking card.
+ *
+ * When the operator attaches the cart, the newest in-transit Kasimedu fish
+ * truck shows the cart's sensors. Every other row stays on the simulation.
  */
 
 import { useColdgridStore } from "@/store/coldgridStore";
 import { getNode } from "@/lib/city/chennai";
 import { getProduce } from "@/lib/engine/produce";
+import type { Shipment } from "@/lib/engine/simulation";
 import { ppscUnitId } from "@/lib/hardware/ppsc";
+import { useFleetCart } from "@/components/hardware/useFleetCart";
 import { qualityToRgb, rgbCss } from "./colors";
 import CargoHealth from "./CargoHealth";
 
@@ -43,76 +48,98 @@ export default function ShipmentPanel() {
         </p>
       ) : (
         <ul className="max-h-72 space-y-3 overflow-y-auto pr-1">
-          {[...shipments].reverse().map((s) => {
-            const profile = getProduce(s.produce);
-            const q = s.batch.quality;
-            const color = rgbCss(qualityToRgb(q));
-            const isSpoiled = q <= 0;
-            const selected = s.id === selectedId;
-            const unit = ppscUnitId(s.id);
-            return (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedShipment(s.id)}
-                  className={`relative w-full overflow-hidden rounded-lg border p-3 text-left shadow-inner transition-transform hover:scale-[1.02] ${
-                    selected
-                      ? "border-twin-cyan/60 bg-twin-cyan/10"
-                      : "border-slate-700/50 bg-slate-900/40"
-                  }`}
-                >
-                  <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundColor: color }} />
-
-                  <div className="flex items-center justify-between relative z-10">
-                    <span className="text-sm font-bold text-white drop-shadow-md">
-                      {profile.label}{" "}
-                      <span className="font-mono text-[10px] text-twin-cyan font-normal ml-1">{unit}</span>
-                    </span>
-                    <span className="font-mono text-sm font-bold text-glow" style={{ color }}>
-                      {q.toFixed(0)}%
-                    </span>
-                  </div>
-
-                  <div className="mt-1.5 font-mono text-[10px] text-slate-400 relative z-10">
-                    {formatGps(s.position)}
-                  </div>
-
-                  <div className="mt-2 grid grid-cols-3 gap-1 relative z-10">
-                    <SensorChip label="T" value={`${s.lastTempC.toFixed(1)}°`} />
-                    <SensorChip label="RH" value={`${s.lastRH.toFixed(0)}%`} />
-                    <SensorChip label="VOC" value={s.lastVOC.toFixed(0)} />
-                  </div>
-                  <CargoHealth
-                    produce={s.produce}
-                    batch={s.batch}
-                    T_C={s.lastTempC}
-                    RH={s.lastRH}
-                    VOC={s.lastVOC}
-                    compact
-                  />
-
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800/80 border border-slate-700">
-                    <div
-                      className="h-full rounded-full transition-all duration-300 shadow-[0_0_8px_currentColor]"
-                      style={{ width: `${q}%`, backgroundColor: color }}
-                    />
-                  </div>
-                  <div className="mt-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.05em] text-slate-400 relative z-10">
-                    <span>
-                      {getNode(s.originId).name.split(" ")[0]} →{" "}
-                      {getNode(s.destinationId).name.split(" ")[0]}
-                    </span>
-                    <span className={s.status === "delivered" ? "text-twin-emerald text-glow" : (isSpoiled ? "text-twin-danger animate-pulse text-glow" : "text-twin-cyan text-glow")}>
-                      {isSpoiled ? "SPOILED" : s.status === "in-transit" ? "LIVE" : s.status}
-                    </span>
-                  </div>
-                </button>
-              </li>
-            );
-          })}
+          {[...shipments].reverse().map((s) => (
+            <ShipmentRow
+              key={s.id}
+              shipment={s}
+              selected={s.id === selectedId}
+              onSelect={() => setSelectedShipment(s.id)}
+            />
+          ))}
         </ul>
       )}
     </div>
+  );
+}
+
+function ShipmentRow({
+  shipment: s,
+  selected,
+  onSelect,
+}: {
+  shipment: Shipment;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const cart = useFleetCart(s.id);
+  const profile = getProduce(s.produce);
+  const tempC = cart?.tempC ?? s.lastTempC;
+  const rh = cart?.rh ?? s.lastRH;
+  const voc = cart?.voc ?? s.lastVOC;
+  const q = cart?.quality ?? s.batch.quality;
+  const viewBatch = cart?.batch ?? s.batch;
+  const color = rgbCss(qualityToRgb(q));
+  const isSpoiled = q <= 0;
+  const unit = ppscUnitId(s.id);
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`relative w-full overflow-hidden rounded-lg border p-3 text-left shadow-inner transition-transform hover:scale-[1.02] ${
+          selected
+            ? "border-twin-cyan/60 bg-twin-cyan/10"
+            : "border-slate-700/50 bg-slate-900/40"
+        }`}
+      >
+        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundColor: color }} />
+
+        <div className="flex items-center justify-between relative z-10">
+          <span className="text-sm font-bold text-white drop-shadow-md">
+            {profile.label}{" "}
+            <span className="font-mono text-[10px] text-twin-cyan font-normal ml-1">{unit}</span>
+          </span>
+          <span className="font-mono text-sm font-bold text-glow" style={{ color }}>
+            {q.toFixed(0)}%
+          </span>
+        </div>
+
+        <div className="mt-1.5 font-mono text-[10px] text-slate-400 relative z-10">
+          {formatGps(s.position)}
+        </div>
+
+        <div className="mt-2 grid grid-cols-3 gap-1 relative z-10">
+          <SensorChip label="T" value={`${tempC.toFixed(1)}°`} />
+          <SensorChip label="RH" value={`${rh.toFixed(0)}%`} />
+          <SensorChip label="VOC" value={voc.toFixed(0)} />
+        </div>
+        <CargoHealth
+          produce={s.produce}
+          batch={viewBatch}
+          T_C={tempC}
+          RH={rh}
+          VOC={voc}
+          compact
+        />
+
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800/80 border border-slate-700">
+          <div
+            className="h-full rounded-full transition-all duration-300 shadow-[0_0_8px_currentColor]"
+            style={{ width: `${q}%`, backgroundColor: color }}
+          />
+        </div>
+        <div className="mt-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.05em] text-slate-400 relative z-10">
+          <span>
+            {getNode(s.originId).name.split(" ")[0]} →{" "}
+            {getNode(s.destinationId).name.split(" ")[0]}
+          </span>
+          <span className={s.status === "delivered" ? "text-twin-emerald text-glow" : (isSpoiled ? "text-twin-danger animate-pulse text-glow" : "text-twin-cyan text-glow")}>
+            {isSpoiled ? "SPOILED" : cart ? "CART" : s.status === "in-transit" ? "LIVE" : s.status}
+          </span>
+        </div>
+      </button>
+    </li>
   );
 }
 

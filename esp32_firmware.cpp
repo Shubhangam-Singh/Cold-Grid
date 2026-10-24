@@ -1,23 +1,66 @@
 // ═══════════════════════════════════════════════════════
-//  PPSC v25 — Final Patent-Ready Firmware
+//  PPSC v26 — Final Audited Firmware
 //  ─────────────────────────────────────────────────────
 //  Project  : Perishable Predictor Smart Cart (PPSC)
-//  Version  : v25 (built on v24 derived λ/γ parameters)
+//  Version  : v26 (full audit of v25 — 23 bugs fixed, BUG-1…BUG-23)
 //  Author   : Shubhangam Singh (23BKT0059), VIT Vellore
-//  Course   : BCSE497J — Project 1
-//  Guide    : Dr. Kankana Roy
+//  Course   : BCSE305L — Embedded Systems
+//  Faculty  : Dr. C. Sharmila
 //  College  : VIT Vellore
 //  Patent   : Indian Patent Application filed, IPO Chennai
 //             IDF-B Doc No. 02-IPR-R003, VIT IPR&TTCELL
 //  Novel    : Adaptive Arrhenius with EMA thermal memory (Ea_eff modulation)
 //  Board    : ESP32 DevKit V1 | Core: 3.3.6 | IDE: 1.8.19
 //  ─────────────────────────────────────────────────────
-//  Base     : v24 (Derived λ/γ + State Reset + USB Power Fix)
+//  Base     : v25 (Watchdog + Persistent State + NaN guards)
+//
+//  ═══════════════════════════════════════════════════
+//  v26 FIXES — physics model, DB[] and patent claims UNCHANGED.
+//  Every change is additive; real-time EMA recursion is identical.
+//  ═══════════════════════════════════════════════════
+//   BUG-1  State checksum rejected ~9% of valid saves (float→text
+//          rounding). P1: integer fields + Fletcher-16 over the text.
+//   BUG-2  State save not power-safe (truncate-then-write).
+//          P2: write .tmp → rename; loader falls back to .tmp.
+//   BUG-3  Power-off time ignored on resume. P3: RTC epoch saved;
+//          boot catch-up integrates Arrhenius over the gap (ZOH).
+//   BUG-4  RGB: polarity flipped to cathode in v25 (colours inverted
+//          on the common-anode LED), on/off only (yellow looked green),
+//          expired blinked red/yellow. P4: PWM on dedicated LEDC
+//          channels, common-anode default, hold BACK at power-on to
+//          flip polarity (saved in flash), calibrated colour table.
+//   BUG-5  Demo progress overwrote the real produce state (and was
+//          saved to SD). P5: snapshot on demo start, restore + real-
+//          time catch-up on demo stop; saves always write real state.
+//   BUG-6  EMA memory depended on call rate (demo = 150–1500× too
+//          long). P6: λ_eff = λ^(Δt_sim / 2 s) — exact for 2-s steps.
+//   BUG-7  ML re-detecting the SAME produce wiped freshness + EMA.
+//   BUG-8  ML substring match let 1-char serial noise switch produce.
+//   BUG-9  Physics-mode switch zeroed EMA; Fixed mode did not track
+//          EMA. P9: EMA tracked in both modes, never reset on switch.
+//   BUG-10 State save cadence tied to totalLogs (could save every 2 s
+//          when SD log append failed). P10: independent 30 s timer.
+//   BUG-11 Daily summary only if powered at exactly 00:00, duplicated
+//          on expiry. P11: day-change detection, correct date.
+//   BUG-12 Next-tier label showed "EXPD" for the 15% alarm threshold.
+//   BUG-13 Home title "PPSC|Leafy_Veg" overlapped the clock.
+//   BUG-14 Text clipped: Prod History + Demo footers, Day Report name.
+//   BUG-15 Selling with 0 stock still added revenue.
+//   BUG-16 MQ-135 "ready" dropped for 2 min after millis() rollover.
+//   BUG-17 Watchdog errors unchecked; reset() spammed when not armed.
+//   BUG-18 Header/version strings wrong (BCSE497J, v24 on screens).
+//   BUG-19 RTC sanity window ended 2030 (would reset clock in 2031).
+//   BUG-20 Mode-B LUT covered 0–51.6 °C, comment said 0–55 °C.
+//   BUG-21 Log file #999 truncated on every boot after 999 files.
+//   BUG-22 DHT22 failure silently froze temperature. P22: fault flag
+//          after 30 s of failed reads (OLED + dashboard + serial).
+//   BUG-23 Buzzer re-attach failed (core 3.x refuses double attach),
+//          so the 2nd confirm tone played at the wrong pitch.
 //
 //  ═══════════════════════════════════════════════════
 //  v25 ADDITIONS (additive only — physics & patent claims unchanged):
 //  ═══════════════════════════════════════════════════
-//   [v25-1] Hardware watchdog (30dfs) — auto-reboots on loop hang
+//   [v25-1] Hardware watchdog (30s) — auto-reboots on loop hang
 //           (I2C lockup, SD stall). Essential for unattended carts.
 //   [v25-2] Persistent state (PPSC_STATE.txt) — freshness, EMA, and
 //           expiry survive power cycles. Checksum + range validated.
@@ -151,7 +194,8 @@
 //    DS1307 RTC      — SDA=21  SCL=22 (shared I2C)
 //    SD Card SPI     — CS=5  SCK=18  MISO=19  MOSI=23
 //    RGB LED         — R=GPIO2  G=GPIO27  B=GPIO15
-//                      220Ω on each colour leg
+//                      220Ω on each colour leg, COMMON ANODE → 3.3V
+//                      (hold BACK at power-on to flip polarity)
 //    Buzzer NPN      — GPIO32 → 1kΩ → NPN Base
 //    BTN UP=25  DOWN=26  SEL=33  BACK=14
 //    Battery ADC     — GPIO35 (voltage divider, input-only)
@@ -168,17 +212,34 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <esp_task_wdt.h>   // v25: hardware watchdog for continuous deployment
+#include <Preferences.h>    // v26: NVS flash — remembers RGB polarity choice
 
 // ═══════════════════════════════════════════════════════
-//  VERSION STRINGS — v24
+//  VERSION STRINGS — v26
 // ═══════════════════════════════════════════════════════
-const char* MODEL_VERSION  = "PPSC-v25-final";
-const char* PHYSICS_MODEL  = "Arrhenius+EMA+PostMult v25 (2026-03-05)";
+const char* MODEL_VERSION  = "PPSC-v26-final";
+const char* PHYSICS_MODEL  = "Arrhenius+EMA+PostMult v26 (2026-10-20)";
+#define FW_TAG "v26"
 
 // v25: Watchdog — reboots ESP32 if main loop hangs >30s (I2C lockup, SD stall)
 #define WDT_TIMEOUT_S   30
+bool wdtArmed = false;      // v26 BUG-17: only feed the WDT if it really armed
+
 // v25: Persistent state — survives power cycle so freshness resumes correctly
 #define STATE_FILE      "/PPSC_STATE.txt"
+#define STATE_TMP       "/PPSC_STATE.tmp"   // v26 P2: write here, then rename
+#define STATE_SAVE_MS   30000UL             // v26 P10: save every 30 s
+#define CATCHUP_MAX_S   (30UL * 24UL * 3600UL) // v26 P3: cap power-off gap at 30 days
+#define CATCHUP_STEP_S  60.0f               // v26 P3: integration step for the gap
+unsigned long lastStateSave = 0;
+bool     rtcOk        = false;  // v26 P3: RTC present + ticking → stamp saves
+bool     rtcTrusted   = false;  // v26 P3: RTC kept time across the power-off?
+uint32_t offlineGapS  = 0;      // v26 P3: last power-off gap applied (for display)
+
+// v26 P6: λ is DEFINED per 2-second sensor step (IDF-B Appendix A:
+// λ = exp(−2.9957·Δt/τ_bio), Δt = 2 s). For any other elapsed simulated
+// time Δt_sim the exact equivalent is λ_eff = λ^(Δt_sim / 2 s).
+#define EMA_STEP_S      2.0f
 
 // ═══════════════════════════════════════════════════════
 //  WIFI CONFIG
@@ -209,17 +270,110 @@ RTC_DS1307 rtc;
 #define BTN_SEL   33
 #define BTN_BACK  14
 
-// ── RGB LED ──────────────────────────────────────────
-#define RGB_COMMON_ANODE  false
+// ── RGB LED — v26 P4 ─────────────────────────────────
+// Your LED is COMMON ANODE (long leg → 3.3V): a colour lights when its
+// pin is driven LOW. v25 had this set to false, which inverted every
+// colour (fresh = magenta, off = white).
+// If your colours still look inverted: HOLD the BACK button while
+// powering on (≈1 s). Polarity flips and is remembered in flash.
+#define RGB_COMMON_ANODE_DEFAULT  true
 #define RGB_R   2
 #define RGB_G  27
 #define RGB_B  15
+// PWM on LEDC low-speed channels 8–10 → never shares a timer with the
+// buzzer (which auto-attaches on channel 0, high-speed group).
+#define RGB_PWM_FREQ   5000
+#define RGB_PWM_RES       8
+#define RGB_CH_R          8
+#define RGB_CH_G          9
+#define RGB_CH_B         10
+// Colour table (0–255 per channel). With equal 220Ω resistors the green
+// die is ~2–3× brighter than red, so yellow/orange need reduced green.
+// Tune here if your LED's tint differs.
+#define COL_FRESH_R   0
+#define COL_FRESH_G 255
+#define COL_FRESH_B   0
+#define COL_MOD_R   255   // yellow
+#define COL_MOD_G    90
+#define COL_MOD_B     0
+#define COL_LOW_R   255   // orange
+#define COL_LOW_G    28
+#define COL_LOW_B     0
+#define COL_CRIT_R  255   // red
+#define COL_CRIT_G    0
+#define COL_CRIT_B    0
 
+bool rgbCommonAnode = RGB_COMMON_ANODE_DEFAULT;
+bool rgbPwmOk       = false;
+uint8_t rgbLastR = 1, rgbLastG = 1, rgbLastB = 1;  // force first write
+
+// Drive one channel. v = 0 (off) … 255 (full), polarity handled here.
+void rgbChannel(int pin, uint8_t v) {
+  if (rgbPwmOk) {
+    ledcWrite(pin, rgbCommonAnode ? (uint32_t)(255 - v) : (uint32_t)v);
+  } else {
+    bool on = (v >= 128);
+    digitalWrite(pin, rgbCommonAnode ? (on ? LOW : HIGH) : (on ? HIGH : LOW));
+  }
+}
+
+// Set the LED colour (only touches hardware when the colour changes).
+void rgbSet(uint8_t r, uint8_t g, uint8_t b) {
+  if (r == rgbLastR && g == rgbLastG && b == rgbLastB) return;
+  rgbChannel(RGB_R, r);
+  rgbChannel(RGB_G, g);
+  rgbChannel(RGB_B, b);
+  rgbLastR = r; rgbLastG = g; rgbLastB = b;
+}
+
+// Kept from v20–v25 for compatibility: full on/off of a single pin.
 void rgbWrite(int pin, bool on) {
-  if (RGB_COMMON_ANODE)
-    digitalWrite(pin, on ? LOW : HIGH);
-  else
-    digitalWrite(pin, on ? HIGH : LOW);
+  rgbChannel(pin, on ? 255 : 0);
+  if (pin == RGB_R) rgbLastR = on ? 255 : 0;
+  if (pin == RGB_G) rgbLastG = on ? 255 : 0;
+  if (pin == RGB_B) rgbLastB = on ? 255 : 0;
+}
+
+// Attach PWM; fall back to plain digital pins if LEDC refuses.
+void rgbBegin() {
+  rgbPwmOk = ledcAttachChannel(RGB_R, RGB_PWM_FREQ, RGB_PWM_RES, RGB_CH_R)
+          && ledcAttachChannel(RGB_G, RGB_PWM_FREQ, RGB_PWM_RES, RGB_CH_G)
+          && ledcAttachChannel(RGB_B, RGB_PWM_FREQ, RGB_PWM_RES, RGB_CH_B);
+  if (!rgbPwmOk) {
+    ledcDetach(RGB_R); ledcDetach(RGB_G); ledcDetach(RGB_B);
+    pinMode(RGB_R, OUTPUT); pinMode(RGB_G, OUTPUT); pinMode(RGB_B, OUTPUT);
+    Serial.println("[RGB] PWM attach failed — using on/off mode");
+  }
+  rgbLastR = rgbLastG = rgbLastB = 1;   // force the write below
+  rgbSet(0, 0, 0);
+}
+
+// Hold BACK during power-on (≈1 s) to flip LED polarity; saved in NVS.
+// Needs the OLED initialised first so the vendor can see the result.
+void rgbLoadPolarity() {
+  Adafruit_SH1106G& d = display;
+  Preferences prefs;
+  prefs.begin("ppsc", false);
+  rgbCommonAnode = prefs.getBool("rgbCA", RGB_COMMON_ANODE_DEFAULT);
+  if (digitalRead(BTN_BACK) == LOW) {
+    delay(1000);
+    if (digitalRead(BTN_BACK) == LOW) {
+      rgbCommonAnode = !rgbCommonAnode;
+      prefs.putBool("rgbCA", rgbCommonAnode);
+      Serial.printf("[RGB] Polarity flipped → %s (saved)\n",
+        rgbCommonAnode ? "COMMON ANODE" : "COMMON CATHODE");
+      d.clearDisplay();
+      d.setTextSize(1); d.setTextColor(SH110X_WHITE);
+      d.setCursor(4, 10); d.print("RGB polarity saved:");
+      d.setCursor(4, 26); d.print(rgbCommonAnode ? "COMMON ANODE" : "COMMON CATHODE");
+      d.setCursor(4, 46); d.print("Release BACK...");
+      d.display();
+      unsigned long t0 = millis();
+      while (digitalRead(BTN_BACK) == LOW && millis() - t0 < 5000) delay(10);
+      delay(300);
+    }
+  }
+  prefs.end();
 }
 
 #define BUZZER_PIN      32
@@ -296,7 +450,9 @@ void transitionToMode(PowerMode newMode);
 #define LUT2D_SIZE      (LUT2D_EA_STEPS * LUT2D_T_STEPS)
 static float lut2D[LUT2D_SIZE];
 static float lut2D_Ea_min, lut2D_Ea_step, lut2D_Ea_inv;
-static float lut2D_T_min = 0.0f, lut2D_T_step = 3.4375f; // 0-55°C in 16 steps
+// v26 BUG-20: 16 points span 15 intervals → step = 55/15 to really reach 55°C
+// (v25 used 3.4375 = 55/16, so the table stopped at 51.56°C). Mode B only.
+static float lut2D_T_min = 0.0f, lut2D_T_step = 55.0f / 15.0f; // 0-55°C, 16 points
 static float lut2D_T_inv;
 
 // LUT for Mode C: 1D lookup [temperature only, fixed Ea_base]
@@ -567,11 +723,28 @@ bool  isExpired          = false;
 int   demoSpeedIdx       = 2;
 unsigned long produceSetTime = 0;
 
+// v26 P5: real produce state saved when a demo starts, restored when it stops
+struct DemoSnapshot {
+  bool          valid;
+  float         cumulativeDeg;
+  float         thermalEMA;
+  bool          expired;
+  unsigned long startMs;
+  uint32_t      startEpoch;   // RTC time at demo start (0 = RTC untrusted)
+};
+DemoSnapshot demoSnap = {false, 0.0f, 0.0f, false, 0, 0};
+
 // MQ-135
 float currentVOC    = 0.0;
 float gasMultiplier = 1.0;   // kept for display compatibility
 bool  mq135Ready    = false;
 int   mq135RawLast  = 0;
+bool  mq135WarmDone = false;   // v26 BUG-16: latched once warm-up completes
+
+// v26 P22: DHT22 fault detection
+int   dhtFailStreak = 0;
+bool  sensorFault   = false;
+#define DHT_FAULT_STREAK  15   // 15 × 2 s = 30 s of failed reads → fault
 
 // Physics mode
 bool useAdaptiveEa = false;
@@ -623,6 +796,7 @@ char logFilename[20]   = "/PPSC_LOG.csv";
 char summaryFilename[] = "/PPSC_SUMM.csv";
 unsigned long totalLogs = 0;
 bool stateRestored = false;  // v25: set by loadLastState() to skip fresh-start resets
+int  sumYear = 0, sumMonth = 0, sumDay = 0;  // v26 P11: date the sell counters belong to
 
 // v25 UI: OLED burn-in protection. SH1106 panels burn in during 24/7 cart
 // deployment (static border + labels). Dim contrast after idle, restore on
@@ -901,6 +1075,53 @@ float calcKBase25(int idx) {
   return DB[idx].k0 * expf(-Ea_J / (R_GAS * T_K));
 }
 
+// ─── v26 P6 + P9: THERMAL-HISTORY EMA (time-scaled, both modes) ──────
+//   u_t   = max(0, (T_K − T_stress) / 10)          (unchanged since v22)
+//   λ_eff = λ^(Δt_sim / 2 s)                        (v26)
+//   EMA   = λ_eff·EMA + (1 − λ_eff)·u_t             (unchanged form)
+// Proof of equivalence: n consecutive 2-s steps at constant u give
+//   EMA_n = λ^n·EMA_0 + (1 − λ^n)·u
+// which is exactly one step with λ_eff = λ^n. So a real-time 2-s step is
+// the same recursion as v24/v25, while demo mode (300 ms wall = up to
+// 3000 s simulated) and power-off catch-up now give the SAME persistence
+// in product time (Milk: 25 min, not 62.6 h at 1000×).
+// v26 P9: called from BOTH Fixed and Adaptive mode, so switching engines
+// never loses the thermal history (no reset on switch any more).
+void updateThermalEMA(int idx, float simSeconds, float tempC) {
+  if (simSeconds <= 0.0f) return;
+  const Produce& p = DB[idx];
+  float u_t    = fmaxf(0.0f, (tempC + 273.15f - p.thermalStressK) / 10.0f);
+  float lamEff = powf(p.lambda, simSeconds / EMA_STEP_S);
+  adp_thermalEMA = lamEff * adp_thermalEMA + (1.0f - lamEff) * u_t;
+}
+
+// ─── H(RH) POST-MULTIPLIER (v22 STEP 4 + STEP 7, factored out in v26) ─
+//   H = min(1 + β·max(0, (RH − RH_ref)/s_RH), 1 + β)
+//   Leafy veg: desiccation at RH < 60%  → H = max(H, 1 + 0.30·(60 − RH)/20)
+// Identical math to v22–v25; shared by live update and offline catch-up.
+float calcHumidityMult(int idx, float rh) {
+  const Produce& p = DB[idx];
+  float rh_excess = fmaxf(0.0f, (rh - p.rhRef) / p.sRh);
+  float H = 1.0f + p.beta_rate * rh_excess;
+  H = fminf(H, 1.0f + p.beta_rate);                    // cap
+  if (idx == 3 && rh < 60.0f) {                         // Leafy veg only
+    float desicc = 1.0f + 0.30f * (60.0f - rh) / 20.0f;
+    if (desicc > H) H = desicc;
+  }
+  return H;
+}
+
+// 5-tier pricing (unchanged tiers) — v26: shared helper
+void updatePriceFromFreshness() {
+  if (isExpired) { currentPrice = 0.0f; return; }
+  float f = currentFreshness;
+  if      (f > 80) currentPrice = DB[selectedProduce].basePrice;
+  else if (f > 60) currentPrice = DB[selectedProduce].basePrice * 0.85f;
+  else if (f > 40) currentPrice = DB[selectedProduce].basePrice * 0.65f;
+  else if (f > 20) currentPrice = DB[selectedProduce].basePrice * 0.40f;
+  else             currentPrice = DB[selectedProduce].basePrice * 0.15f;
+}
+
 // ─── MODE A: Fixed Ea (simplified — no modifiers) ─────
 void updateDegradationFixed(float dt) {
   const Produce& p = DB[selectedProduce];
@@ -911,13 +1132,17 @@ void updateDegradationFixed(float dt) {
   float k_ref = calcKBase25(selectedProduce);
   degradationRate = k_now / k_ref;
 
+  float spd = demoMode ? demoSpeeds[demoSpeedIdx] : 1.0f;
+  // v26 P9: keep tracking thermal history (not used by the Fixed rate,
+  // but preserved so a later switch to Adaptive starts with true history)
+  updateThermalEMA(selectedProduce, spd * dt * 3600.0f, currentTemp);
+
   adp_Ea_eff  = p.Ea;
   adp_G_voc   = 1.0f;
   adp_H_rh    = 1.0f;
   adp_F_hist  = 1.0f;
   gasMultiplier = 1.0f;
 
-  float spd = demoMode ? demoSpeeds[demoSpeedIdx] : 1.0f;
   cumulativeDeg += spd * degradationRate * dt
                  / (p.shelfLifeDays * 24.0f);
 }
@@ -929,13 +1154,13 @@ void updateDegradationFixed(float dt) {
 //  (Gram & Huss 1996; Peleg 2006; Zwietering 1991).
 void updateDegradationAdaptive(float dt) {
   const Produce& p = DB[selectedProduce];
+  float spd = demoMode ? demoSpeeds[demoSpeedIdx] : 1.0f;
 
   // STEP 1: Thermal history EMA → F(hist) → modulates Ea
   //   u_t uses per-produce thermalStressK (not global 303.15)
+  //   v26 P6: λ scaled to the simulated time of this step
   float T_K = currentTemp + 273.15f;
-  float u_t = fmaxf(0.0f, (T_K - p.thermalStressK) / 10.0f);
-  adp_thermalEMA = p.lambda * adp_thermalEMA
-                 + (1.0f - p.lambda) * u_t;
+  updateThermalEMA(selectedProduce, spd * dt * 3600.0f, currentTemp);
   adp_F_hist = fmaxf(p.fMin, 1.0f - p.gamma_ * adp_thermalEMA);
 
   // STEP 2: Ea_eff = Ea_base × F (ONLY F acts on Ea)
@@ -963,16 +1188,12 @@ void updateDegradationAdaptive(float dt) {
   float k_ref = calcKBase25(selectedProduce);
   float baseRate = k_now / k_ref;
 
-  // STEP 4: H(RH) — humidity POST-MULTIPLIER on rate
-  //   Physical: water activity for microbial growth (pre-exponential)
-  //   hum_mult = 1 + beta_rate × max(0, (RH - rhRef) / sRh)
-  //   Capped at 1 + beta_rate
-  float rh_excess = fmaxf(0.0f, (currentHumidity - p.rhRef) / p.sRh);
-  adp_H_rh = 1.0f + p.beta_rate * rh_excess;
-  adp_H_rh = fminf(adp_H_rh, 1.0f + p.beta_rate);  // cap
+  // STEP 4 + 7: H(RH) — humidity POST-MULTIPLIER on rate
+  //   hum_mult = 1 + beta_rate × max(0, (RH - rhRef) / sRh), capped at 1 + beta_rate
+  //   Leafy veg: desiccation branch at RH < 60%
+  adp_H_rh = calcHumidityMult(selectedProduce, currentHumidity);
 
   // STEP 5: G(VOC) — VOC POST-MULTIPLIER on rate
-  //   Physical: VOC = biological state indicator, not Ea modifier
   //   voc_mult = 1 + alpha_rate × max(0, tanh((VOC - vocRef) / sVoc))
   //   Capped at 1 + alpha_rate
   adp_G_voc = 1.0f;
@@ -986,18 +1207,7 @@ void updateDegradationAdaptive(float dt) {
   degradationRate = baseRate * adp_H_rh * adp_G_voc;
   gasMultiplier = adp_G_voc;  // for display compatibility
 
-  // STEP 7: Leafy veg bidirectional humidity (desiccation at RH<60%)
-  //   Physical: stomatal water loss at low RH accelerates wilting
-  if (selectedProduce == 3 && currentHumidity < 60.0f) {
-    float desicc = 1.0f + 0.30f * (60.0f - currentHumidity) / 20.0f;
-    if (desicc > adp_H_rh) {
-      adp_H_rh = desicc;
-      degradationRate = baseRate * adp_H_rh * adp_G_voc;
-    }
-  }
-
   // STEP 8: Update degradation accumulator
-  float spd = demoMode ? demoSpeeds[demoSpeedIdx] : 1.0f;
   cumulativeDeg += spd * degradationRate * dt
                  / (p.shelfLifeDays * 24.0f);
 
@@ -1006,6 +1216,53 @@ void updateDegradationAdaptive(float dt) {
     adp_thermalEMA, adp_G_voc, adp_H_rh, adp_F_hist,
     adp_Ea_eff, p.Ea, degradationRate,
     'A' + (int)currentPowerMode);
+}
+
+// ─── v26 P3 + P5: OFFLINE CATCH-UP ───────────────────
+// Integrates the SAME model over a span with no live readings:
+//   • a power-off gap (RTC time now − time of last save), or
+//   • the real time that passed while a demo was running.
+// Zero-order hold: T and RH held at the last valid reading; VOC unknown
+// during the gap → G = 1 (neutral). Mode-A precision (expf), 60-s steps.
+// Returns freshness lost in percentage points.
+float advanceStateOffline(float gapSec, float tempC, float rh) {
+  if (gapSec <= 0.0f || isExpired) return 0.0f;
+  if (gapSec > (float)CATCHUP_MAX_S) gapSec = (float)CATCHUP_MAX_S;
+  if (isnan(tempC) || tempC < -40.0f || tempC > 125.0f) tempC = 25.0f;
+  if (isnan(rh) || rh < 0.0f || rh > 100.0f) rh = DB[selectedProduce].rhRef;
+
+  const Produce& p = DB[selectedProduce];
+  float T_K   = tempC + 273.15f;
+  float Ea_J  = p.Ea * 1000.0f;
+  float k_ref = calcKBase25(selectedProduce);
+  float H     = useAdaptiveEa ? calcHumidityMult(selectedProduce, rh) : 1.0f;
+  float before = cumulativeDeg;
+  float remaining = gapSec;
+  int steps = 0;
+
+  while (remaining > 0.0f && cumulativeDeg < 1.0f) {
+    float stepS = fminf(CATCHUP_STEP_S, remaining);
+    updateThermalEMA(selectedProduce, stepS, tempC);
+    float Ea_eff = Ea_J;
+    if (useAdaptiveEa) {
+      float F = fmaxf(p.fMin, 1.0f - p.gamma_ * adp_thermalEMA);
+      Ea_eff = fmaxf(p.eaMinFrac * Ea_J, fminf(Ea_J, Ea_J * F));
+    }
+    float rate = (p.k0 * expf(-Ea_eff / (R_GAS * T_K))) / k_ref * H;
+    cumulativeDeg += rate * (stepS / 3600.0f) / (p.shelfLifeDays * 24.0f);
+    remaining -= stepS;
+    if ((++steps & 1023) == 0 && wdtArmed) esp_task_wdt_reset();
+  }
+
+  cumulativeDeg      = constrain(cumulativeDeg, 0.0f, 1.0f);
+  currentFreshness   = (1.0f - cumulativeDeg) * 100.0f;
+  shelfLifeRemaining = (1.0f - cumulativeDeg) * p.shelfLifeDays * 24.0f;
+  if (cumulativeDeg >= 1.0f) {
+    currentFreshness = 0.0f;
+    isExpired = true;
+  }
+  updatePriceFromFreshness();
+  return (cumulativeDeg - before) * 100.0f;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1053,27 +1310,30 @@ void updateDegradation() {
     currentFreshness = 0.0f;
     isExpired        = true;
     currentPrice     = 0.0f;
-    Serial.println("[!] EXPIRED");
-    writeDailySummary();
+    Serial.println(demoMode ? "[!] EXPIRED (demo)" : "[!] EXPIRED");
+    // v26 BUG-11: no summary row here any more — the day-change row
+    // already contains these counters (v25 wrote them twice).
     saveLastState();   // v25: persist expiry — must survive power cycle
     return;
   }
 
-  // 5-tier pricing (unchanged)
-  float f = currentFreshness;
-  if      (f > 80) currentPrice = DB[selectedProduce].basePrice;
-  else if (f > 60) currentPrice = DB[selectedProduce].basePrice * 0.85f;
-  else if (f > 40) currentPrice = DB[selectedProduce].basePrice * 0.65f;
-  else if (f > 20) currentPrice = DB[selectedProduce].basePrice * 0.40f;
-  else             currentPrice = DB[selectedProduce].basePrice * 0.15f;
+  updatePriceFromFreshness();   // 5-tier pricing (unchanged)
 }
 
 // ═══════════════════════════════════════════════════════
 //  BUZZER
 // ═══════════════════════════════════════════════════════
-void buzzerBeep(int freq = BUZZER_FREQ) {
+// v26 BUG-23: ESP32 core 3.x refuses ledcAttach() on a pin that is already
+// attached ("Pin is already attached to LEDC"), so v25's second confirm
+// tone and the spike chirps silently stayed at the first frequency.
+// Always detach before re-tuning.
+void buzzerTone(int freq, uint32_t duty) {
+  ledcDetach(BUZZER_PIN);
   ledcAttach(BUZZER_PIN, freq, BUZZER_RES);
-  ledcWrite(BUZZER_PIN, 128);
+  ledcWrite(BUZZER_PIN, duty);
+}
+void buzzerBeep(int freq = BUZZER_FREQ) {
+  buzzerTone(freq, 128);
 }
 void buzzerStop() {
   ledcWrite(BUZZER_PIN, 0);
@@ -1082,22 +1342,21 @@ void buzzerStop() {
   digitalWrite(BUZZER_PIN, LOW);
 }
 void confirmBeep() {
-  ledcAttach(BUZZER_PIN, 1500, BUZZER_RES);
-  ledcWrite(BUZZER_PIN, 128); delay(100);
-  ledcWrite(BUZZER_PIN, 0);   delay(80);
-  ledcAttach(BUZZER_PIN, 2000, BUZZER_RES);
-  ledcWrite(BUZZER_PIN, 128); delay(100);
+  buzzerTone(1500, 128); delay(100);
+  ledcWrite(BUZZER_PIN, 0); delay(80);
+  buzzerTone(2000, 128); delay(100);
   buzzerStop();
 }
 void spikeBeep() {
   for (int i = 0; i < 3; i++) {
-    ledcAttach(BUZZER_PIN, 1600, BUZZER_RES);
-    ledcWrite(BUZZER_PIN, 128); delay(70);
-    ledcWrite(BUZZER_PIN, 0);   delay(70);
+    buzzerTone(1600, 128); delay(70);
+    ledcWrite(BUZZER_PIN, 0); delay(70);
   }
-  ledcDetach(BUZZER_PIN);
-  pinMode(BUZZER_PIN, OUTPUT);
-  digitalWrite(BUZZER_PIN, LOW);
+  buzzerStop();
+}
+void errorBeep() {   // v26: short low tone (e.g. sell with no stock)
+  buzzerTone(400, 128); delay(150);
+  buzzerStop();
 }
 void handleBuzzer() {
   unsigned long now = millis();
@@ -1121,7 +1380,12 @@ void handleBuzzer() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  RGB LED
+//  RGB LED — v26 P4
+//  Colour bands match the OLED labels (freshLabel):
+//    FRESH  >60%  green      MOD  30–60%  yellow
+//    LOW  15–30%  orange     CRIT  <15%   red (buzzer also beeps)
+//    EXPIRED      red blinking 250 ms on / 250 ms off
+//    DHT22 fault  status colour alternates with blue every 500 ms
 // ═══════════════════════════════════════════════════════
 void updateLEDs() {
   unsigned long now = millis();
@@ -1131,18 +1395,24 @@ void updateLEDs() {
       lastLEDBlink  = now;
       ledBlinkState = !ledBlinkState;
     }
-    rgbWrite(RGB_R, true);
-    rgbWrite(RGB_G, ledBlinkState ? false : true);
-    rgbWrite(RGB_B, false);
+    if (ledBlinkState) rgbSet(COL_CRIT_R, COL_CRIT_G, COL_CRIT_B);
+    else               rgbSet(0, 0, 0);
+    return;
+  }
+
+  if (sensorFault && (now / 500) % 2 == 0) {
+    rgbSet(0, 0, 255);                       // blue = sensor problem
     return;
   }
 
   if (currentFreshness > 60) {
-    rgbWrite(RGB_R, false); rgbWrite(RGB_G, true);  rgbWrite(RGB_B, false);
+    rgbSet(COL_FRESH_R, COL_FRESH_G, COL_FRESH_B);
   } else if (currentFreshness > 30) {
-    rgbWrite(RGB_R, true);  rgbWrite(RGB_G, true);  rgbWrite(RGB_B, false);
+    rgbSet(COL_MOD_R, COL_MOD_G, COL_MOD_B);
+  } else if (currentFreshness > 15) {
+    rgbSet(COL_LOW_R, COL_LOW_G, COL_LOW_B);
   } else {
-    rgbWrite(RGB_R, true);  rgbWrite(RGB_G, false); rgbWrite(RGB_B, false);
+    rgbSet(COL_CRIT_R, COL_CRIT_G, COL_CRIT_B);
   }
 }
 
@@ -1268,6 +1538,12 @@ void drawMLNotification() {
 // ═══════════════════════════════════════════════════════
 void recordSell() {
   if (isExpired) return;
+  // v26 BUG-15: v25 kept adding revenue after stock reached 0
+  if (stockQty <= 0) {
+    Serial.println("[SELL] Out of stock — adjust stock on the Price screen");
+    errorBeep();
+    return;
+  }
   totalUnitsSold++;
   sellRecord.totalRevenue += currentPrice;
   float f = currentFreshness;
@@ -1276,13 +1552,9 @@ void recordSell() {
   else if (f > 40) sellRecord.at35++;
   else if (f > 20) sellRecord.at60++;
   else             sellRecord.at85++;
-  if (stockQty > 0) stockQty--;
-  ledcAttach(BUZZER_PIN, 1800, BUZZER_RES);
-  ledcWrite(BUZZER_PIN, 80); delay(60);
-  ledcWrite(BUZZER_PIN, 0);
-  ledcDetach(BUZZER_PIN);
-  pinMode(BUZZER_PIN, OUTPUT);
-  digitalWrite(BUZZER_PIN, LOW);
+  stockQty--;
+  buzzerTone(1800, 80); delay(60);
+  buzzerStop();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1311,6 +1583,7 @@ const char* nextTierLabel() {
   else if (currentFreshness > 60) return "-35%";
   else if (currentFreshness > 40) return "-60%";
   else if (currentFreshness > 20) return "-85%";
+  else if (currentFreshness > 15) return "CRIT";  // v26 BUG-12: 15% alarm, not expiry
   else                             return "EXPD";
 }
 
@@ -1323,9 +1596,14 @@ const char* nextTierLabel() {
 //  If invalid: force-reset to compile time and retry once.
 //  If still invalid: return a safe fallback (2024-01-01).
 // ═══════════════════════════════════════════════════════
+// v26 BUG-19: window widened to 2024–2040 (v25 stopped at 2030, which
+// would have force-reset a healthy clock on 1 Jan 2031). Garbage dates
+// seen from a dead CR2032 (2050, 2076, 2096) are still rejected.
+#define RTC_YEAR_MIN 2024
+#define RTC_YEAR_MAX 2040
 DateTime safeRTCNow() {
   DateTime now = rtc.now();
-  if (now.year() >= 2024 && now.year() <= 2030 &&
+  if (now.year() >= RTC_YEAR_MIN && now.year() <= RTC_YEAR_MAX &&
       now.month() >= 1 && now.month() <= 12 &&
       now.day() >= 1 && now.day() <= 31) {
     return now;  // valid
@@ -1334,8 +1612,9 @@ DateTime safeRTCNow() {
   Serial.printf("[RTC] Garbage mid-session: %04d-%02d-%02d — resetting\n",
     now.year(), now.month(), now.day());
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  rtcOk = false;   // v26 P3: clock unreliable — stop time-stamping saves
   now = rtc.now();
-  if (now.year() >= 2024 && now.year() <= 2030) {
+  if (now.year() >= RTC_YEAR_MIN && now.year() <= RTC_YEAR_MAX) {
     return now;  // recovered
   }
   // RTC unrecoverable — return safe fallback to avoid FAT32 corruption
@@ -1346,15 +1625,20 @@ DateTime safeRTCNow() {
 // ═══════════════════════════════════════════════════════
 //  SD LOGGING
 // ═══════════════════════════════════════════════════════
+// v26 P11: writes the counters for the day they belong to (sumYear/Month/Day),
+// not "today" — the row is written just after midnight has passed.
 void writeDailySummary() {
   if (!sdOk) return;
-  DateTime now = safeRTCNow();
+  if (sumYear == 0) {                     // date not set yet → use today
+    DateTime now = safeRTCNow();
+    sumYear = now.year(); sumMonth = now.month(); sumDay = now.day();
+  }
   File f = SD.open(summaryFilename, FILE_APPEND);
   if (!f) return;
   if (f.size() == 0)
     f.println("Date,Produce,UnitsSold,Revenue,Full,-15,-35,-60,-85");
   char d[12];
-  snprintf(d, sizeof(d), "%04d-%02d-%02d", now.year(), now.month(), now.day());
+  snprintf(d, sizeof(d), "%04d-%02d-%02d", sumYear, sumMonth, sumDay);
   f.printf("%s,%s,%d,%.1f,%d,%d,%d,%d,%d\n", d,
     DB[selectedProduce].name, totalUnitsSold, sellRecord.totalRevenue,
     sellRecord.atFull, sellRecord.at15, sellRecord.at35,
@@ -1362,14 +1646,24 @@ void writeDailySummary() {
   f.close();
 }
 
+// v26 BUG-11: v25 only rolled over if the cart was powered at exactly
+// 00:00–00:00:59; now any change of date triggers the summary + reset.
+// Runs even without an SD card so the Day Report screen resets daily.
 void checkDailySummary() {
-  if (!sdOk) return;
   DateTime now = safeRTCNow();
-  if (now.day() != lastSummaryDay && now.hour()==0 && now.minute()==0) {
-    writeDailySummary();
+  if (lastSummaryDay < 0) {               // first call after boot
     lastSummaryDay = now.day();
+    sumYear = now.year(); sumMonth = now.month(); sumDay = now.day();
+    return;
+  }
+  if (now.day() != lastSummaryDay) {
+    writeDailySummary();                  // previous day's row
+    lastSummaryDay = now.day();
+    sumYear = now.year(); sumMonth = now.month(); sumDay = now.day();
     sellRecord = {0,0,0,0,0, 0.0};
     totalUnitsSold = 0;
+    Serial.printf("[DAY] New day %04d-%02d-%02d — sell counters reset\n",
+      sumYear, sumMonth, sumDay);
   }
 }
 
@@ -1379,10 +1673,13 @@ void createLogFile() {
     snprintf(logFilename, sizeof(logFilename), "/PPSC_%03d.csv", i);
     if (!SD.exists(logFilename)) break;
   }
-  File f = SD.open(logFilename, FILE_WRITE);
+  // v26 BUG-21: if all 999 names exist, APPEND to #999 instead of wiping it
+  bool reuse = SD.exists(logFilename);
+  File f = SD.open(logFilename, reuse ? FILE_APPEND : FILE_WRITE);
   if (f) {
-    f.println("Date,Time,Produce,Mode,PwrMode,Temp,Hum,VOC,"
-              "EaEff,G,H,F,EMA,Rate,Fresh,Price,Status,Src,Batt");
+    if (!reuse)
+      f.println("Date,Time,Produce,Mode,PwrMode,Temp,Hum,VOC,"
+                "EaEff,G,H,F,EMA,Rate,Fresh,Price,Status,Src,Batt");
     f.close();
     Serial.printf("[SD] Created: %s\n", logFilename);
   } else {
@@ -1410,8 +1707,8 @@ void logToSD() {
     adp_Ea_eff, adp_G_voc, adp_H_rh, adp_F_hist,
     adp_thermalEMA, degradationRate,
     currentFreshness, currentPrice,
-    isExpired ? "EXPIRED" : freshLabel(currentFreshness),
-    mlDetected ? "ML" : "Man",
+    isExpired ? "EXPIRED" : (sensorFault ? "DHTFAULT" : freshLabel(currentFreshness)),
+    demoMode ? "Demo" : (mlDetected ? "ML" : "Man"),
     batteryPct);
   f.close();
   totalLogs++;
@@ -1421,81 +1718,216 @@ void logToSD() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  PERSISTENT STATE — v25: resume freshness after power cycle
+//  PERSISTENT STATE — v25 feature, rebuilt in v26
 //  Without this, every power blip resets freshness to 100%,
 //  which is dangerous for a food-safety device: a vendor's
 //  half-spoiled stock would falsely read as fresh after a
 //  battery swap or brownout.
 //
-//  Format: produce,cumulativeDeg,EMA,adaptive,expired,checksum
-//  A checksum (sum of fields × 1000) detects corruption from
-//  power loss during the write (partial/torn file).
+//  v26 format (one line):
+//    S2,produce,cdMicro,emaMicro,adaptive,expired,epoch,temp10,rh10,fletcher16
+//  • BUG-1 fix: integers only (×10⁶), checksum over the exact text → a
+//    valid save can never fail verification (v25 rejected ~9.2%).
+//  • BUG-2 fix: write PPSC_STATE.tmp, then rename over PPSC_STATE.txt.
+//    A power cut at any instant leaves one complete file.
+//  • BUG-3 fix: RTC epoch + last T/RH saved → on boot the power-off gap
+//    is integrated with the same Arrhenius/EMA model (zero-order hold).
+//  • v25 files are still read once (migration), without a timestamp.
 // ═══════════════════════════════════════════════════════
+uint16_t stateChecksum(const char* s, size_t n) {
+  uint16_t a = 0, b = 0;                     // Fletcher-16
+  for (size_t i = 0; i < n; i++) {
+    a = (uint16_t)((a + (uint8_t)s[i]) % 255);
+    b = (uint16_t)((b + a) % 255);
+  }
+  return (uint16_t)((b << 8) | a);
+}
+
 void saveLastState() {
   if (!sdOk) return;
-  // Compute simple integrity checksum
-  long chk = selectedProduce
-           + (long)(cumulativeDeg * 100000.0f)
-           + (long)(adp_thermalEMA * 100000.0f)
-           + (useAdaptiveEa ? 7 : 0)
-           + (isExpired ? 13 : 0);
-  File f = SD.open(STATE_FILE, FILE_WRITE);  // FILE_WRITE truncates → atomic-ish
-  if (!f) return;
-  f.printf("%d,%.6f,%.6f,%d,%d,%ld\n",
-    selectedProduce, cumulativeDeg, adp_thermalEMA,
-    useAdaptiveEa ? 1 : 0, isExpired ? 1 : 0, chk);
+  lastStateSave = millis();
+
+  // v26 P5: during a demo the REAL produce state lives in the snapshot
+  bool  useSnap = demoMode && demoSnap.valid;
+  float cd   = useSnap ? demoSnap.cumulativeDeg : cumulativeDeg;
+  float ema  = useSnap ? demoSnap.thermalEMA    : adp_thermalEMA;
+  bool  expd = useSnap ? demoSnap.expired       : isExpired;
+
+  // Only the RTC's own timeline matters (gap = now − then), so a clock set
+  // at this boot is fine for stamping; trust is checked again at load time.
+  uint32_t epoch = 0;
+  if (rtcOk) {
+    uint32_t nowE = safeRTCNow().unixtime();   // may clear rtcOk
+    if (rtcOk) epoch = useSnap ? demoSnap.startEpoch : nowE;
+  }
+
+  char payload[96];
+  int n = snprintf(payload, sizeof(payload), "S2,%d,%ld,%ld,%d,%d,%lu,%d,%d",
+    selectedProduce,
+    lroundf(cd  * 1000000.0f),
+    lroundf(ema * 1000000.0f),
+    useAdaptiveEa ? 1 : 0, expd ? 1 : 0,
+    (unsigned long)epoch,
+    (int)lroundf(currentTemp * 10.0f),
+    (int)lroundf(currentHumidity * 10.0f));
+  if (n <= 0 || n >= (int)sizeof(payload)) return;
+  uint16_t chk = stateChecksum(payload, (size_t)n);
+
+  File f = SD.open(STATE_TMP, FILE_WRITE);
+  if (!f) { Serial.println("[STATE] Save failed (open)"); return; }
+  f.printf("%s,%u\n", payload, (unsigned)chk);
   f.close();
+  SD.remove(STATE_FILE);
+  if (!SD.rename(STATE_TMP, STATE_FILE))
+    Serial.println("[STATE] Rename failed — .tmp kept as fallback");
 }
 
 void loadLastState() {
   if (!sdOk) return;
-  if (!SD.exists(STATE_FILE)) {
+  const char* path = SD.exists(STATE_FILE) ? STATE_FILE
+                   : (SD.exists(STATE_TMP) ? STATE_TMP : nullptr);
+  if (!path) {
     Serial.println("[STATE] No saved state — fresh start");
     return;
   }
-  File f = SD.open(STATE_FILE, FILE_READ);
+  File f = SD.open(path, FILE_READ);
   if (!f) return;
   String line = f.readStringUntil('\n');
   f.close();
+  line.trim();
 
-  // Parse CSV: produce,cumulativeDeg,EMA,adaptive,expired,checksum
-  int p; float cd, ema; int adp, exp; long chk;
-  int n = sscanf(line.c_str(), "%d,%f,%f,%d,%d,%ld",
-                 &p, &cd, &ema, &adp, &exp, &chk);
-  if (n != 6) {
-    Serial.println("[STATE] Corrupt (parse fail) — ignoring");
-    return;
-  }
+  int p = -1, adp = 0, expd = 0, t10 = 250, rh10 = 600;
+  float cd = 0.0f, ema = 0.0f;
+  uint32_t epoch = 0;
+  bool ok = false;
 
-  // Verify checksum
-  long expectChk = p + (long)(cd * 100000.0f) + (long)(ema * 100000.0f)
-                 + (adp ? 7 : 0) + (exp ? 13 : 0);
-  if (chk != expectChk) {
-    Serial.printf("[STATE] Checksum mismatch (got %ld, want %ld) — ignoring\n",
-      chk, expectChk);
-    return;
+  if (line.startsWith("S2,")) {
+    int cut = line.lastIndexOf(',');
+    if (cut > 0) {
+      String payload = line.substring(0, cut);
+      long chk = line.substring(cut + 1).toInt();
+      uint16_t want = stateChecksum(payload.c_str(), payload.length());
+      long cdU = 0, emaU = 0;
+      unsigned long ep = 0;
+      int n = sscanf(payload.c_str(), "S2,%d,%ld,%ld,%d,%d,%lu,%d,%d",
+                     &p, &cdU, &emaU, &adp, &expd, &ep, &t10, &rh10);
+      if (n == 8 && chk == (long)want) {
+        cd = cdU / 1000000.0f;
+        ema = emaU / 1000000.0f;
+        epoch = (uint32_t)ep;
+        ok = true;
+      } else {
+        Serial.printf("[STATE] Corrupt (fields=%d chk=%ld want=%u) — ignoring\n",
+          n, chk, (unsigned)want);
+      }
+    }
+  } else {
+    // v25 legacy line: produce,cumulativeDeg,EMA,adaptive,expired,checksum
+    long chk = 0;
+    int n = sscanf(line.c_str(), "%d,%f,%f,%d,%d,%ld",
+                   &p, &cd, &ema, &adp, &expd, &chk);
+    if (n == 6) {
+      long expect = p + (long)(cd * 100000.0f) + (long)(ema * 100000.0f)
+                  + (adp ? 7 : 0) + (expd ? 13 : 0);
+      // v25's checksum could be off by 1 per float field (that was BUG-1)
+      if (labs(chk - expect) <= 2) {
+        ok = true;
+        Serial.println("[STATE] Migrated v25 state file (no timestamp)");
+      }
+    }
+    if (!ok) Serial.println("[STATE] Corrupt legacy file — ignoring");
   }
+  if (!ok) return;
+
   // Range-validate before applying (defense against valid-checksum garbage)
   if (p < 0 || p >= PRODUCE_COUNT || cd < 0.0f || cd > 1.0f ||
-      ema < 0.0f || ema > 10.0f) {
+      ema < 0.0f || ema > 10.0f || t10 < -400 || t10 > 1250 ||
+      rh10 < 0 || rh10 > 1000) {
     Serial.println("[STATE] Values out of range — ignoring");
     return;
   }
 
   // Apply restored state
-  selectedProduce  = p;
-  cumulativeDeg    = cd;
-  adp_thermalEMA   = ema;
-  useAdaptiveEa    = (adp == 1);
-  isExpired        = (exp == 1);
-  currentFreshness = (1.0f - cumulativeDeg) * 100.0f;
+  selectedProduce    = p;
+  cumulativeDeg      = cd;
+  adp_thermalEMA     = ema;
+  useAdaptiveEa      = (adp == 1);
+  isExpired          = (expd == 1);
+  currentFreshness   = isExpired ? 0.0f : (1.0f - cumulativeDeg) * 100.0f;
   shelfLifeRemaining = (1.0f - cumulativeDeg) * DB[p].shelfLifeDays * 24.0f;
-  currentPrice     = isExpired ? 0.0f : DB[p].basePrice;
-  stateRestored    = true;  // v25: signal setup() to skip fresh-start resets
+  updatePriceFromFreshness();
+  stateRestored      = true;  // v25: signal setup() to skip fresh-start resets
+
+  // v26 P3: add the time the cart was switched off
+  if (isExpired) {
+    // nothing to add — already unsellable
+  } else if (epoch == 0) {
+    Serial.println("[STATE] No RTC timestamp — power-off time NOT added");
+  } else if (!rtcTrusted) {
+    Serial.println("[STATE] RTC lost time (check CR2032) — power-off time NOT added");
+  } else {
+    uint32_t nowE = safeRTCNow().unixtime();
+    if (rtcOk && nowE > epoch) {
+      uint32_t gap = nowE - epoch;
+      float lost = advanceStateOffline((float)gap, t10 / 10.0f, rh10 / 10.0f);
+      offlineGapS = gap;
+      Serial.printf("[STATE] Power-off gap %luh%02lum @%.1fC → -%.2f%% freshness%s\n",
+        (unsigned long)(gap / 3600), (unsigned long)((gap % 3600) / 60),
+        t10 / 10.0f, lost, isExpired ? " → EXPIRED" : "");
+    } else if (nowE < epoch) {
+      Serial.println("[STATE] RTC is earlier than last save — gap ignored");
+    }
+  }
 
   Serial.printf("[STATE] Resumed: %s fresh=%.1f%% EMA=%.3f %s%s\n",
     DB[p].name, currentFreshness, adp_thermalEMA,
     useAdaptiveEa ? "ADP" : "FIX", isExpired ? " EXPIRED" : "");
+}
+
+// ═══════════════════════════════════════════════════════
+//  DEMO MODE — v26 P5: demo runs on a copy of the real state
+// ═══════════════════════════════════════════════════════
+void demoTakeSnapshot() {
+  demoSnap.valid         = true;
+  demoSnap.cumulativeDeg = cumulativeDeg;
+  demoSnap.thermalEMA    = adp_thermalEMA;
+  demoSnap.expired       = isExpired;
+  demoSnap.startMs       = millis();
+  demoSnap.startEpoch    = 0;
+  if (rtcOk) {
+    uint32_t e = safeRTCNow().unixtime();
+    if (rtcOk) demoSnap.startEpoch = e;
+  }
+}
+
+void startDemo() {
+  demoTakeSnapshot();
+  demoMode = true;
+  lastDegTime = lastDemoUpdate = millis();
+  Serial.printf("[DEMO] Started at %dx — real state saved (%.1f%%)\n",
+    demoSpeedFull[demoSpeedIdx], currentFreshness);
+}
+
+void stopDemo() {
+  demoMode = false;
+  if (demoSnap.valid) {
+    float realS = (millis() - demoSnap.startMs) / 1000.0f;
+    cumulativeDeg  = demoSnap.cumulativeDeg;
+    adp_thermalEMA = demoSnap.thermalEMA;
+    isExpired      = demoSnap.expired;
+    currentFreshness   = isExpired ? 0.0f : (1.0f - cumulativeDeg) * 100.0f;
+    shelfLifeRemaining = (1.0f - cumulativeDeg)
+                       * DB[selectedProduce].shelfLifeDays * 24.0f;
+    updatePriceFromFreshness();
+    // real time kept passing during the demo → integrate it (P3 model)
+    advanceStateOffline(realS, currentTemp, currentHumidity);
+    demoSnap.valid = false;
+    if (buzzerOn && !isExpired) { buzzerStop(); buzzerOn = false; }
+    Serial.printf("[DEMO] Stopped — real state restored: %.1f%% (+%.0f s real time)\n",
+      currentFreshness, realS);
+  }
+  lastDegTime = millis();
+  saveLastState();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1510,11 +1942,9 @@ void saveProdHistory() {
   if (prodHistCount < PROD_HIST_MAX) prodHistCount++;
 }
 
-// ═══════════════════════════════════════════════════════
-//  RESET — v21: EMA reset to 0, LUT recomputation
-// ═══════════════════════════════════════════════════════
-void resetProduce() {
-  saveProdHistory();
+// v26: shared "fresh item" reset used by Reset, menu switch and ML switch
+// (v24/v25 had three hand-copied versions of this block).
+void clearProduceState() {
   cumulativeDeg = 0.0;
   currentFreshness = 100.0;
   isExpired = false;
@@ -1522,10 +1952,12 @@ void resetProduce() {
   tempSpikeWarned = false;
   gasMultiplier = 1.0;
 
-  // v21: Reset thermal EMA to 0 (new formula)
+  // v21: Reset thermal EMA to 0 — a NEW item has no thermal history
   adp_thermalEMA = 0.0f;
   adp_Ea_eff = DB[selectedProduce].Ea;
   adp_G_voc = adp_H_rh = adp_F_hist = 1.0f;
+  currentPrice = DB[selectedProduce].basePrice;
+  shelfLifeRemaining = DB[selectedProduce].shelfLifeDays * 24.0f;
 
   // v21: Recompute LUTs for new produce
   if (currentPowerMode == PWR_MODE_B)
@@ -1540,8 +1972,43 @@ void resetProduce() {
     tempHistory[i] = currentTemp;
     freshHistory[i] = 100.0;
   }
+  // v26 P5: if a demo is running, the new item becomes the "real" state
+  if (demoMode) demoTakeSnapshot();
+}
+
+// ═══════════════════════════════════════════════════════
+//  RESET — v21: EMA reset to 0, LUT recomputation
+// ═══════════════════════════════════════════════════════
+void resetProduce() {
+  if (demoMode && demoSnap.valid) {      // history should show the REAL item
+    cumulativeDeg = demoSnap.cumulativeDeg;
+    isExpired     = demoSnap.expired;
+    currentFreshness = isExpired ? 0.0f : (1.0f - cumulativeDeg) * 100.0f;
+  }
+  saveProdHistory();
+  clearProduceState();
   confirmBeep();
   saveLastState();  // v25: persist reset so it survives power cycle
+}
+
+// v24 FIX [D] kept: history is saved for the OLD produce before the switch.
+void applyProduceSwitch(int newIdx, const char* src) {
+  if (newIdx < 0 || newIdx >= PRODUCE_COUNT || newIdx == selectedProduce) return;
+  int oldProduce = selectedProduce;
+  if (demoMode && demoSnap.valid) {      // history should show the REAL item
+    cumulativeDeg = demoSnap.cumulativeDeg;
+    isExpired     = demoSnap.expired;
+    currentFreshness = isExpired ? 0.0f : (1.0f - cumulativeDeg) * 100.0f;
+  }
+  saveProdHistory();                     // still the OLD produce here
+  Serial.printf("[%s] History saved: %s @ %.1f%%\n",
+    src, DB[oldProduce].name, currentFreshness);
+  selectedProduce = newIdx;
+  clearProduceState();
+  confirmBeep();
+  Serial.printf("[%s] Auto-reset: %s -> %s\n",
+    src, DB[oldProduce].name, DB[selectedProduce].name);
+  saveLastState();  // v25: persist switch immediately (resume accuracy)
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1550,6 +2017,21 @@ void resetProduce() {
 void readSensors() {
   float t = dht.readTemperature();
   float h = dht.readHumidity();
+
+  // v26 P22: count consecutive failed reads; physics keeps the last valid
+  // value (zero-order hold) but the vendor is told the sensor is down.
+  if (isnan(t) || isnan(h)) {
+    if (dhtFailStreak < 10000) dhtFailStreak++;
+  } else {
+    dhtFailStreak = 0;
+  }
+  bool fault = (dhtFailStreak >= DHT_FAULT_STREAK);
+  if (fault != sensorFault) {
+    sensorFault = fault;
+    Serial.println(fault ? "[DHT] FAULT — no valid reading for 30 s (check GPIO4 / pull-up)"
+                         : "[DHT] Recovered");
+  }
+
   if (!isnan(t)) {
     float rise = t - prevTemp;
     if (rise >= TEMP_SPIKE_THRESH && !isExpired) {
@@ -1569,18 +2051,22 @@ void readSensors() {
     tempSpikeActive = false;
 
   // MQ-135: only read if powered (Mode A or B)
+  // v26 BUG-16: warm-up latched — v25's (millis() > 120000) went false
+  // again for 2 minutes after the 49.7-day millis() rollover.
+  if (!mq135WarmDone && millis() > MQ135_WARMUP_MS) mq135WarmDone = true;
   if (currentPowerMode != PWR_MODE_C) {
-    mq135Ready = (millis() > MQ135_WARMUP_MS);
+    mq135Ready = mq135WarmDone;
     currentVOC = readMQ135ppm();
   } else {
     mq135Ready = false;
     currentVOC = 0.0f;
   }
 
-  Serial.printf("[SENS] T=%.1f H=%.0f VOC=%.0f raw=%d %s PM=%c Rt=%.3f\n",
+  Serial.printf("[SENS] T=%.1f H=%.0f VOC=%.0f raw=%d %s PM=%c Rt=%.3f%s\n",
     currentTemp, currentHumidity, currentVOC, mq135RawLast,
     useAdaptiveEa ? "ADP" : "FIX",
-    'A' + (int)currentPowerMode, degradationRate);
+    'A' + (int)currentPowerMode, degradationRate,
+    sensorFault ? " DHT-FAULT" : "");
 }
 
 void logGraphPoint() {
@@ -1597,9 +2083,12 @@ void processMLCommand(const char* cmd) {
   String s = String(cmd); s.trim();
   if (s.length() == 0) return;
 
-  // v24: PING/PONG for connection testing from Python script
+  // v24: PING/PONG for connection testing from Python script.
+  // The PONG text is a protocol string matched by ppsc_ml_classifier.py —
+  // kept byte-identical; firmware version is sent on a separate line.
   if (s == "PING") {
     Serial.println("[ML-PONG] PPSC v24 ready");
+    Serial.println("[ML-INFO] firmware " FW_TAG);
     return;
   }
 
@@ -1621,54 +2110,32 @@ void processMLCommand(const char* cmd) {
       name.c_str(), conf, ML_CONFIDENCE);
     return;
   }
+
+  // v26 BUG-8: v25 matched ANY substring ("A" matched "TOMATO"), so 1-char
+  // serial noise could switch produce and wipe freshness. Now: ≥3 chars,
+  // whole-name or prefix match only.
+  String nUp = name; nUp.toUpperCase(); nUp.replace("_", " "); nUp.trim();
+  if (nUp.length() < 3) {
+    Serial.printf("[ML-ERR] Label too short: '%s'\n", name.c_str());
+    return;
+  }
   for (int i = 0; i < PRODUCE_COUNT; i++) {
-    String dbUp = String(DB[i].name); dbUp.toUpperCase(); dbUp.replace("_"," ");
-    String nUp  = name;               nUp.toUpperCase();  nUp.replace("_"," ");
-    if (nUp == dbUp || dbUp.indexOf(nUp)>=0 || nUp.indexOf(dbUp)>=0) {
-      // v24 BUG FIX: save history for OLD produce BEFORE switching selectedProduce.
-      // Previously: selectedProduce=i then resetProduce()→saveProdHistory() saved NEW name.
-      // Now: save old produce history first, then switch, then reset without re-saving.
-      int oldProduce = selectedProduce;
-      if (oldProduce != i) {
-        strncpy(prodHist[prodHistNext].name, DB[oldProduce].name, 11);
-        prodHist[prodHistNext].name[11] = '\0';
-        prodHist[prodHistNext].finalFreshness = currentFreshness;
-        prodHist[prodHistNext].valid = true;
-        prodHistNext = (prodHistNext + 1) % PROD_HIST_MAX;
-        if (prodHistCount < PROD_HIST_MAX) prodHistCount++;
-        Serial.printf("[ML] History saved: %s @ %.1f%%\n",
-          DB[oldProduce].name, currentFreshness);
-      }
-      selectedProduce = i;
+    String dbUp = String(DB[i].name); dbUp.toUpperCase(); dbUp.replace("_", " ");
+    if (nUp == dbUp || nUp.startsWith(dbUp) || dbUp.startsWith(nUp)) {
       mlDetected = true; mlConf = conf; mlTime = millis();
-      strncpy(mlLabel, DB[i].name, sizeof(mlLabel)-1);
-      // Reset state directly — do NOT call resetProduce() as it calls saveProdHistory() again
-      cumulativeDeg = 0.0;
-      currentFreshness = 100.0;
-      currentPrice = DB[selectedProduce].basePrice;
-      shelfLifeRemaining = DB[selectedProduce].shelfLifeDays * 24.0f;
-      isExpired = false;
-      tempSpikeActive = false;
-      tempSpikeWarned = false;
-      gasMultiplier = 1.0;
-      adp_thermalEMA = 0.0f;
-      adp_Ea_eff = DB[selectedProduce].Ea;
-      adp_G_voc = adp_H_rh = adp_F_hist = 1.0f;
-      if (currentPowerMode == PWR_MODE_B)
-        precompute_lut2D(selectedProduce);
-      else if (currentPowerMode == PWR_MODE_C)
-        precompute_lut1D(selectedProduce);
-      if (buzzerOn) { buzzerStop(); buzzerOn = false; }
-      lastDegTime = produceSetTime = lastGraphLog = millis();
-      historyIdx = historyCount = 0;
-      for (int g = 0; g < GRAPH_POINTS; g++) {
-        tempHistory[g] = currentTemp;
-        freshHistory[g] = 100.0;
+      strncpy(mlLabel, DB[i].name, sizeof(mlLabel) - 1);
+      mlLabel[sizeof(mlLabel) - 1] = '\0';
+
+      // v26 BUG-7: the camera re-sending the SAME produce must NOT reset
+      // freshness/EMA (v25 wiped the item every time it was re-detected).
+      if (i == selectedProduce) {
+        Serial.printf("[ML-SAME] %s already active — state kept (%.1f%%, EMA=%.3f)\n",
+          DB[i].name, currentFreshness, adp_thermalEMA);
+        return;
       }
-      confirmBeep();
+      applyProduceSwitch(i, "ML");
       currentScreen = SCR_HOME;
       Serial.printf("[ML-OK] %s (%.1f%%)\n", DB[i].name, conf);
-      saveLastState();  // v25: persist ML switch immediately (resume accuracy)
       return;
     }
   }
@@ -1719,8 +2186,8 @@ void handleAPIData() {
       snprintf(predBuf, sizeof(predBuf), "%dh%dm to %s",
                (int)(mins/60), (int)fmod(mins,60), nextTierLabel());
   }
-  char json[1400];
-  snprintf(json, sizeof(json),
+  char json[1600];   // v26: +4 fields; worst case ≈1.1 kB
+  int jn = snprintf(json, sizeof(json),
     "{\"produce\":\"%s\",\"physicsMode\":\"%s\","
     "\"physModel\":\"%s\","
     "\"powerMode\":\"%s\",\"batteryPct\":%.0f,"
@@ -1741,7 +2208,9 @@ void handleAPIData() {
     "\"atFull\":%d,\"at15\":%d,\"at35\":%d,"
     "\"at60\":%d,\"at85\":%d,"
     "\"expired\":%s,\"spike\":%s,"
-    "\"spoilRisk\":%s,\"demo\":%s}",
+    "\"spoilRisk\":%s,\"demo\":%s,"
+    "\"sensorFault\":%s,\"fw\":\"%s\","
+    "\"rgbAnode\":%s,\"offlineGapMin\":%lu}",
     DB[selectedProduce].name,
     useAdaptiveEa ? "ADAPTIVE" : "FIXED",
     MODEL_VERSION,
@@ -1767,7 +2236,14 @@ void handleAPIData() {
     isExpired ? "true" : "false",
     tempSpikeActive ? "true" : "false",
     (currentTemp>35.0 && currentHumidity>80.0) ? "true":"false",
-    demoMode ? "true" : "false");
+    demoMode ? "true" : "false",
+    sensorFault ? "true" : "false", FW_TAG,
+    rgbCommonAnode ? "true" : "false",
+    (unsigned long)(offlineGapS / 60UL));
+  if (jn <= 0 || jn >= (int)sizeof(json)) {      // never send truncated JSON
+    server.send(500, "application/json", "{\"error\":\"json overflow\"}");
+    return;
+  }
   server.send(200, "application/json", json);
 }
 
@@ -1779,7 +2255,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PPSC v24 Dashboard</title>
+<title>PPSC v26 Dashboard</title>
 <style>
 :root{--bg:#060a0f;--card:#101d2e;--border:#1e3048;--amber:#f59e0b;--green:#10b981;--red:#ef4444;--orange:#f97316;--blue:#38bdf8;--purple:#a78bfa;--text:#94a3b8;--bright:#e2e8f0;--dim:#3d5068}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1845,7 +2321,7 @@ footer{text-align:center;font-size:.6rem;color:var(--dim);padding:16px;border-to
 <div class="hb">Perishable Predictor Smart Cart</div>
 <h1>PPSC</h1>
 <div class="pn" id="pN">Milk</div>
-<div class="hm">VIT Vellore &bull; BCSE305L &bull; v24 &bull; 192.168.4.1</div>
+<div class="hm">VIT Vellore &bull; BCSE305L &bull; v26 &bull; 192.168.4.1</div>
 <div class="ld">LIVE <span id="lu">now</span></div>
 </header>
 <div class="ab exp" id="aB" style="display:none"><span>&#9888;</span><span id="aM">Alert</span></div>
@@ -1886,7 +2362,7 @@ footer{text-align:center;font-size:.6rem;color:var(--dim);padding:16px;border-to
 <div class="sc"><div class="sb"><div class="sf" id="t4" style="height:0%;background:#ef4444"></div></div><div class="sn" id="c4">0</div><div class="sl">-85%</div></div>
 </div></div>
 </main>
-<footer>3s refresh &bull; PPSC v24 &bull; BCSE305L &bull; VIT Vellore</footer>
+<footer>3s refresh &bull; PPSC v26 &bull; BCSE305L &bull; VIT Vellore</footer>
 <script>
 const C=2*Math.PI*50;
 function fc(f,e){if(e)return'#ef4444';if(f>60)return'#10b981';if(f>30)return'#eab308';if(f>15)return'#f97316';return'#ef4444'}
@@ -1942,6 +2418,7 @@ const ts=[d.atFull,d.at15,d.at35,d.at60,d.at85],mx=Math.max(1,...ts);
 ts.forEach((v,i)=>{document.getElementById('t'+i).style.height=Math.max(2,(v/mx)*100)+'%';document.getElementById('c'+i).textContent=v;});
 const ab=document.getElementById('aB'),am=document.getElementById('aM');
 if(d.expired){ab.style.display='flex';ab.className='ab exp';am.textContent=d.produce+' EXPIRED';}
+else if(d.sensorFault){ab.style.display='flex';ab.className='ab exp';am.textContent='DHT22 sensor fault - temperature is stale';}
 else if(d.spike){ab.style.display='flex';ab.className='ab spk';am.textContent='Temp spike! '+d.temp.toFixed(1)+'C';}
 else if(d.spoilRisk){ab.style.display='flex';ab.className='ab spk';am.textContent='High spoil risk';}
 else ab.style.display='none';
@@ -1983,10 +2460,10 @@ void drawSplash() {
   display.drawLine(10,40,118,40,SH110X_WHITE);
   display.setCursor(22,44); display.print("VIT Vellore");
   display.display(); delay(250);
-  display.setCursor(4,54); display.print("BCSE305L v24");
+  display.setCursor(4,54); display.print("BCSE305L " FW_TAG);
   display.display(); delay(150);
   for (int d=0;d<4;d++) {
-    display.fillCircle(76+d*12,57,2,SH110X_WHITE);
+    display.fillCircle(84+d*10,57,2,SH110X_WHITE);   // v26: no overlap with text
     display.display(); delay(150);
   }
   delay(250);
@@ -2037,8 +2514,10 @@ void drawHomeScreen() {
   char tbuf[12];
   snprintf(tbuf, sizeof(tbuf), "%02d:%02d %s",
     now.hour(), now.minute(), modeShortLabel());
+  // v26 BUG-13: "PPSC|Leafy_Veg" (14 chars) ran into the clock at x=72.
+  // Produce name alone (max "Leafy_Veg D" = 11 chars → ends x=68) fits.
   char lt[22];
-  snprintf(lt, sizeof(lt), "PPSC|%s", DB[selectedProduce].name);
+  snprintf(lt, sizeof(lt), "%s", DB[selectedProduce].name);
   if (demoMode) strncat(lt," D", sizeof(lt)-strlen(lt)-1);
   drawTitleBar(lt, tbuf);
 
@@ -2121,12 +2600,20 @@ void drawHomeScreen() {
     display.print("C");
   }
   else {
-    display.setCursor(2,34);
-    display.print("T:"); display.print(currentTemp,1);
-    display.print("C");
-    display.setCursor(68,34);
-    display.print("H:"); display.print((int)currentHumidity);
-    display.print("%");
+    if (sensorFault && (millis()/500)%2==0) {
+      // v26 P22: DHT22 down — tell the vendor the temperature is stale
+      display.fillRect(1,32,126,10,SH110X_WHITE);
+      display.setTextColor(SH110X_BLACK);
+      display.setCursor(8,33); display.print("DHT22 SENSOR FAULT");
+      display.setTextColor(SH110X_WHITE);
+    } else {
+      display.setCursor(2,34);
+      display.print("T:"); display.print(currentTemp,1);
+      display.print(sensorFault ? "C?" : "C");
+      display.setCursor(68,34);
+      display.print("H:"); display.print((int)currentHumidity);
+      display.print("%");
+    }
     display.setCursor(2,44);
     display.print("Rs."); display.print(currentPrice,1);
     if (stockQty<=3 && (millis()/500)%2==0) {
@@ -2346,18 +2833,19 @@ void drawProdHistoryScreen() {
     display.setCursor(2,56); display.print("BK=Back");
     display.display(); return;
   }
+  // v26 BUG-14: rows on an 8-px pitch so the footer fits above y=64
   for (int i=0; i<min(prodHistCount,5); i++) {
     int idx = (prodHistNext-1-i+PROD_HIST_MAX) % PROD_HIST_MAX;
     if (!prodHist[idx].valid) continue;
-    int y = 14+i*9;
+    int y = 14+i*8;
     display.setCursor(2,y);
     display.print("#"); display.print(i+1); display.print(" ");
     display.print(prodHist[idx].name);
     display.print(" "); display.print(prodHist[idx].finalFreshness,0);
     display.print("%");
   }
-  drawHLine(58);
-  display.setCursor(2,60); display.print("Newest first BK=Back");
+  drawHLine(54);
+  display.setCursor(2,56); display.print("Newest first BK=Back");
   display.display();
 }
 
@@ -2369,10 +2857,12 @@ void drawDayReportScreen() {
   drawTitleBar("DAY REPORT"); drawHLine(12);
   display.setTextSize(1);
   DateTime now = safeRTCNow();
-  char d[12];
+  char d[16];
   snprintf(d,sizeof(d),"%02d/%02d/%04d",now.day(),now.month(),now.year());
   display.setCursor(2,15); display.print(d);
-  display.setCursor(80,15); display.print(DB[selectedProduce].name);
+  // v26 BUG-14: right-align (v25 put "Leafy_Veg" at x=80 → ran past x=127)
+  display.setCursor(126 - (int)strlen(DB[selectedProduce].name) * 6, 15);
+  display.print(DB[selectedProduce].name);
   drawHLine(23);
   display.setCursor(2,26); display.print("Sold: ");
   display.print(totalUnitsSold);
@@ -2417,15 +2907,16 @@ void drawResetConfirm() {
 // ═══════════════════════════════════════════════════════
 //  DEMO SCREEN
 // ═══════════════════════════════════════════════════════
+// v26 BUG-14: re-laid out so the footer sits inside 64 px (v25 drew it at
+// y=60, cut off). Also shows the protected REAL freshness while running.
 void drawDemoScreen() {
   display.clearDisplay();
   display.drawRect(0,0,128,64,SH110X_WHITE);
-  display.drawRect(2,2,124,60,SH110X_WHITE);
-  display.fillRect(3,3,122,11,SH110X_WHITE);
+  display.fillRect(1,1,126,11,SH110X_WHITE);
   display.setTextColor(SH110X_BLACK); display.setTextSize(1);
-  display.setCursor(32,5); display.print("DEMO MODE");
-  display.setTextColor(SH110X_WHITE); drawHLine(14);
-  display.setCursor(4,17);
+  display.setCursor(37,3); display.print("DEMO MODE");
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(4,14);
   display.print("Speed: ");
   display.print(demoSpeedFull[demoSpeedIdx]);
   display.print("x");
@@ -2433,28 +2924,31 @@ void drawDemoScreen() {
     int cx = 4 + i*20;
     bool active = (i == demoSpeedIdx);
     if (active) {
-      display.fillRect(cx,26,19,11,SH110X_WHITE);
+      display.fillRect(cx,23,19,11,SH110X_WHITE);
       display.setTextColor(SH110X_BLACK);
     } else {
-      display.drawRect(cx,26,19,11,SH110X_WHITE);
+      display.drawRect(cx,23,19,11,SH110X_WHITE);
     }
     int lw = strlen(demoSpeedShort[i])*6;
-    display.setCursor(cx+(19-lw)/2, 28);
+    display.setCursor(cx+(19-lw)/2, 25);
     display.print(demoSpeedShort[i]);
     display.setTextColor(SH110X_WHITE);
   }
-  drawHLine(38);
-  display.setCursor(4,41); display.print("Status: ");
+  display.setCursor(4,36);
   if (demoMode) {
-    display.print("RUNNING");
+    display.print("RUN  real:");
+    float realF = demoSnap.valid
+      ? (demoSnap.expired ? 0.0f : (1.0f - demoSnap.cumulativeDeg) * 100.0f)
+      : currentFreshness;
+    display.print(realF,1); display.print("%");
     if ((millis()/400)%2==0)
-      display.fillRect(120,40,5,5,SH110X_WHITE);
-  } else display.print("STOPPED");
-  display.setCursor(4,51);
+      display.fillRect(120,37,5,5,SH110X_WHITE);
+  } else display.print("Status: STOPPED");
+  display.setCursor(4,45);
   display.print("F:"); display.print(currentFreshness,1);
   display.print("% "); display.print(DB[selectedProduce].name);
-  drawHLine(60);
-  display.setCursor(4,60);
+  drawHLine(53);
+  display.setCursor(4,55);
   display.print(demoMode ? "^v=spd SEL=Stop" : "^v=spd SEL=Start");
   display.display();
 }
@@ -2551,56 +3045,10 @@ void handleInput() {
       if (up)  {menuCursor--;if(menuCursor<0)menuCursor=PRODUCE_COUNT-1;}
       if (down){menuCursor++;if(menuCursor>=PRODUCE_COUNT)menuCursor=0;}
       if (sel) {
-        int oldProduce = selectedProduce;
-        // v24 FIX [D]: save history BEFORE selectedProduce changes.
-        // In v23, resetProduce() called saveProdHistory() after the switch,
-        // recording the NEW produce name in history (wrong).
-        // Fix: save old produce state here, then switch, then reset.
-        if (menuCursor != oldProduce) {
-          // Save current produce to history before abandoning it
-          strncpy(prodHist[prodHistNext].name, DB[oldProduce].name, 11);
-          prodHist[prodHistNext].name[11] = '\0';
-          prodHist[prodHistNext].finalFreshness = currentFreshness;
-          prodHist[prodHistNext].valid = true;
-          prodHistNext = (prodHistNext + 1) % PROD_HIST_MAX;
-          if (prodHistCount < PROD_HIST_MAX) prodHistCount++;
-          Serial.printf("[v24] History saved: %s @ %.1f%%\n",
-            DB[oldProduce].name, currentFreshness);
-        }
-        selectedProduce = menuCursor; mlDetected = false;
-        // v23 FIX: auto-reset on produce CHANGE to prevent state carryover
-        // v24: resetProduce() no longer calls saveProdHistory() (already done above)
-        if (oldProduce != selectedProduce) {
-          // Reset without saving history again (already saved above)
-          cumulativeDeg = 0.0;
-          currentFreshness = 100.0;
-          isExpired = false;
-          tempSpikeActive = false;
-          tempSpikeWarned = false;
-          gasMultiplier = 1.0;
-          adp_thermalEMA = 0.0f;
-          adp_Ea_eff = DB[selectedProduce].Ea;
-          adp_G_voc = adp_H_rh = adp_F_hist = 1.0f;
-          // v24 FIX: init price/shelf so home screen doesn't show stale values
-          // for ~2s until first updateDegradation() call
-          currentPrice = DB[selectedProduce].basePrice;
-          shelfLifeRemaining = DB[selectedProduce].shelfLifeDays * 24.0f;
-          if (currentPowerMode == PWR_MODE_B)
-            precompute_lut2D(selectedProduce);
-          else if (currentPowerMode == PWR_MODE_C)
-            precompute_lut1D(selectedProduce);
-          if (buzzerOn) { buzzerStop(); buzzerOn = false; }
-          lastDegTime = produceSetTime = lastGraphLog = millis();
-          historyIdx = historyCount = 0;
-          for (int i = 0; i < GRAPH_POINTS; i++) {
-            tempHistory[i] = currentTemp;
-            freshHistory[i] = 100.0;
-          }
-          confirmBeep();
-          Serial.printf("[v24] Auto-reset: %s -> %s\n",
-            DB[oldProduce].name, DB[selectedProduce].name);
-          saveLastState();  // v25: persist switch immediately (resume accuracy)
-        }
+        // v24 FIX [D] + v23 auto-reset, now in applyProduceSwitch()
+        // (history saved for the OLD produce, then state cleared + persisted)
+        mlDetected = false;
+        applyProduceSwitch(menuCursor, "MENU");
         detailCursor=detailScroll=0;
         currentScreen=SCR_PRODUCE_DETAIL;
       }
@@ -2643,7 +3091,7 @@ void handleInput() {
     case SCR_DEMO:
       if (up)  {demoSpeedIdx--;if(demoSpeedIdx<0)demoSpeedIdx=DEMO_SPEED_COUNT-1;}
       if (down){demoSpeedIdx++;if(demoSpeedIdx>=DEMO_SPEED_COUNT)demoSpeedIdx=0;}
-      if (sel) demoMode=!demoMode;
+      if (sel) { if (demoMode) stopDemo(); else startDemo(); }  // v26 P5
       if (back) currentScreen=SCR_PRODUCE_DETAIL;
       break;
     case SCR_RESET_CONFIRM:
@@ -2660,14 +3108,14 @@ void handleInput() {
         bool newMode=(physicsCursor==1);
         if (newMode!=useAdaptiveEa) {
           useAdaptiveEa=newMode;
-          if (useAdaptiveEa) {
-            adp_thermalEMA = 0.0f;  // v21: new EMA init
-            adp_Ea_eff=DB[selectedProduce].Ea;
-            adp_G_voc=adp_H_rh=adp_F_hist=1.0f;
-          }
+          // v26 BUG-9: EMA is NOT reset any more — it has been tracked in
+          // both modes, so Adaptive starts with the item's true history.
+          adp_Ea_eff=DB[selectedProduce].Ea;
+          adp_G_voc=adp_H_rh=adp_F_hist=1.0f;
           confirmBeep();
-          Serial.printf("[MODE] -> %s Ea\n",
-            useAdaptiveEa?"ADAPTIVE":"FIXED");
+          Serial.printf("[MODE] -> %s Ea (EMA kept = %.3f)\n",
+            useAdaptiveEa?"ADAPTIVE":"FIXED", adp_thermalEMA);
+          saveLastState();
         }
         currentScreen=SCR_PRODUCE_DETAIL;
       }
@@ -2703,7 +3151,9 @@ void drawCurrentScreen() {
 // ═══════════════════════════════════════════════════════
 void setup() {
   Serial.begin(115200);
-  Serial.println("PPSC v25 | Final Patent-Ready Firmware");
+  Serial.println("PPSC v26 | Final Audited Firmware");
+  Serial.println("  [v26] 23 audit fixes — state CRC, power-off catch-up, RGB PWM,");
+  Serial.println("        demo snapshot, dt-invariant EMA, ML guards, UI fixes");
   Serial.println("  [v25] Hardware watchdog (30s) — auto-recover from hangs");
   Serial.println("  [v25] Persistent state — freshness survives power cycle");
   Serial.println("  [v25] NaN guards — bad sensor reads can't poison physics");
@@ -2718,20 +3168,29 @@ void setup() {
   // SD card stall, infinite sensor wait), the chip reboots and resumes
   // from saved state. Essential for unattended vendor-cart deployment.
   // NOTE: ESP32 Arduino core 3.x already inits the Task WDT at boot (5s,
-  // idle tasks subscribed), so we RECONFIGURE rather than deinit/init —
-  // deinit() would fail (ESP_ERR_INVALID_STATE) with idle tasks attached.
+  // idle tasks subscribed), so we RECONFIGURE rather than deinit/init.
+  // v26 BUG-17: every call is checked; reset() is only called if armed
+  // (an unsubscribed esp_task_wdt_reset() logs an error every loop).
+  esp_err_t wdtErr;
   #if ESP_ARDUINO_VERSION_MAJOR >= 3
     esp_task_wdt_config_t wdt_cfg = {
       .timeout_ms = (uint32_t)(WDT_TIMEOUT_S * 1000),
       .idle_core_mask = 0,        // don't watch idle tasks, only our loop
       .trigger_panic = true       // reboot on timeout
     };
-    esp_task_wdt_reconfigure(&wdt_cfg);
+    wdtErr = esp_task_wdt_reconfigure(&wdt_cfg);
+    if (wdtErr == ESP_ERR_INVALID_STATE)          // TWDT not started by core
+      wdtErr = esp_task_wdt_init(&wdt_cfg);
   #else
-    esp_task_wdt_init(WDT_TIMEOUT_S, true);
+    wdtErr = esp_task_wdt_init(WDT_TIMEOUT_S, true);
   #endif
-  esp_task_wdt_add(NULL);           // subscribe this (loop) task
-  Serial.printf("[WDT] Watchdog armed: %ds timeout\n", WDT_TIMEOUT_S);
+  if (wdtErr == ESP_OK) {
+    esp_err_t addErr = esp_task_wdt_add(NULL);    // subscribe this (loop) task
+    wdtArmed = (addErr == ESP_OK || addErr == ESP_ERR_INVALID_ARG); // ARG = already added
+    if (!wdtArmed) wdtErr = addErr;
+  }
+  if (wdtArmed) Serial.printf("[WDT] Watchdog armed: %ds timeout\n", WDT_TIMEOUT_S);
+  else          Serial.printf("[WDT] NOT armed (err 0x%x) — running without watchdog\n", (unsigned)wdtErr);
   Serial.println("  [v23] Auto-reset on produce switch (state carryover fix)");
   Serial.println("  [v23] USB power mode — battery disabled, locked Mode A");
   Serial.println("  [v22] G(VOC) & H(RH) = rate post-multipliers");
@@ -2741,28 +3200,42 @@ void setup() {
   pinMode(BTN_UP,INPUT_PULLUP); pinMode(BTN_DOWN,INPUT_PULLUP);
   pinMode(BTN_SEL,INPUT_PULLUP); pinMode(BTN_BACK,INPUT_PULLUP);
 
-  // RGB LED setup
-  pinMode(RGB_R,OUTPUT); pinMode(RGB_G,OUTPUT); pinMode(RGB_B,OUTPUT);
-  rgbWrite(RGB_R,false); rgbWrite(RGB_G,false); rgbWrite(RGB_B,false);
+  // v26: OLED first, so the RGB polarity prompt/test can be shown on it
+  Wire.begin(21,22);
+  if (!display.begin(0x3C,true)) {
+    Serial.println("[ERR] OLED init failed");
+    Serial.println("[ERR] Try addr 0x3D or check wiring");
+    while(true) { delay(100); }   // watchdog reboots after 30 s and retries
+  }
+  display.setTextColor(SH110X_WHITE);
+  display.setContrast(OLED_FULL_LEVEL);  // v25: start at full brightness
+  lastButtonActivity = millis();         // v25: arm burn-in idle timer
 
-  // Startup RGB self-test
-  Serial.printf("[RGB] Mode=%s  R=GPIO%d G=GPIO%d B=GPIO%d\n",
-    RGB_COMMON_ANODE ? "Common Anode" : "Common Cathode",
-    RGB_R, RGB_G, RGB_B);
-  Serial.println("[RGB] Testing: Red...");
-  rgbWrite(RGB_R,true); delay(300);
-  rgbWrite(RGB_R,false);
-  Serial.println("[RGB] Testing: Green...");
-  rgbWrite(RGB_G,true); delay(300);
-  rgbWrite(RGB_G,false);
-  Serial.println("[RGB] Testing: Blue...");
-  rgbWrite(RGB_B,true); delay(300);
-  rgbWrite(RGB_B,false);
-  Serial.println("[RGB] Testing: White (all on)...");
-  rgbWrite(RGB_R,true); rgbWrite(RGB_G,true); rgbWrite(RGB_B,true);
-  delay(300);
-  rgbWrite(RGB_R,false); rgbWrite(RGB_G,false); rgbWrite(RGB_B,false);
-  Serial.println("[RGB] Test done.");
+  // ── v26 P4: RGB LED — polarity (hold BACK to flip), PWM, self-test ──
+  rgbLoadPolarity();
+  rgbBegin();
+  Serial.printf("[RGB] Mode=%s %s  R=GPIO%d G=GPIO%d B=GPIO%d\n",
+    rgbCommonAnode ? "Common Anode" : "Common Cathode",
+    rgbPwmOk ? "PWM" : "ON/OFF", RGB_R, RGB_G, RGB_B);
+  {
+    const char*   names[4] = {"RED", "GREEN", "BLUE", "WHITE"};
+    const uint8_t cols[4][3] = {{255,0,0},{0,255,0},{0,0,255},{255,255,255}};
+    for (int i = 0; i < 4; i++) {
+      display.clearDisplay(); drawBorder(); drawTitleBar("RGB LED TEST");
+      display.setCursor(4,16); display.print("LED should be:");
+      display.setTextSize(2);
+      display.setCursor(10,28); display.print(names[i]);
+      display.setTextSize(1);
+      display.setCursor(4,46); display.print(rgbCommonAnode ? "Common ANODE" : "Common CATHODE");
+      display.setCursor(4,55); display.print("Wrong? Hold BACK@boot");
+      display.display();
+      Serial.printf("[RGB] Testing: %s...\n", names[i]);
+      rgbSet(cols[i][0], cols[i][1], cols[i][2]);
+      delay(450);
+    }
+    rgbSet(0,0,0);
+    Serial.println("[RGB] Test done.");
+  }
 
   pinMode(BUZZER_PIN,OUTPUT); digitalWrite(BUZZER_PIN,LOW);
 
@@ -2797,21 +3270,17 @@ void setup() {
   for (int i=0;i<PROD_HIST_MAX;i++) prodHist[i].valid=false;
 
   setupWiFi();
-
-  Wire.begin(21,22);
-  if (!display.begin(0x3C,true)) {
-    Serial.println("[ERR] OLED init failed");
-    Serial.println("[ERR] Try addr 0x3D or check wiring");
-    while(true);
-  }
-  display.setTextColor(SH110X_WHITE);
-  display.setContrast(OLED_FULL_LEVEL);  // v25: start at full brightness
-  lastButtonActivity = millis();         // v25: arm burn-in idle timer
   drawSplash();
 
   dht.begin();
-  if (!rtc.begin()) Serial.println("[WARN] RTC not found");
-  if (!rtc.isrunning()) rtc.adjust(DateTime(F(__DATE__),F(__TIME__)));
+  bool rtcFound = rtc.begin();
+  if (!rtcFound) Serial.println("[WARN] RTC not found");
+  bool rtcRunning = rtcFound && rtc.isrunning();
+  if (rtcFound && !rtcRunning) {
+    Serial.println("[RTC] Not running (battery was removed/dead) — set to compile time");
+    rtc.adjust(DateTime(F(__DATE__),F(__TIME__)));
+  }
+  rtcOk = rtcFound;
 
   // v24: DS1307 returns isrunning()==true even with dead CR2032 battery.
   // The oscillator keeps ticking with garbage register values, producing
@@ -2819,7 +3288,7 @@ void setup() {
   // Force-reset if year is outside a sane range.
   {
     DateTime rtcNow = rtc.now();
-    if (rtcNow.year() < 2024 || rtcNow.year() > 2030) {
+    if (rtcNow.year() < RTC_YEAR_MIN || rtcNow.year() > RTC_YEAR_MAX) {
       Serial.printf("[RTC] Garbage date detected: %04d-%02d-%02d %02d:%02d:%02d\n",
         rtcNow.year(), rtcNow.month(), rtcNow.day(),
         rtcNow.hour(), rtcNow.minute(), rtcNow.second());
@@ -2830,9 +3299,12 @@ void setup() {
         rtcNow.year(), rtcNow.month(), rtcNow.day(),
         rtcNow.hour(), rtcNow.minute(), rtcNow.second());
     } else {
-      Serial.printf("[RTC] OK: %04d-%02d-%02d %02d:%02d:%02d\n",
+      // v26 P3: clock survived power-off → power-off gap can be trusted
+      rtcTrusted = rtcRunning;
+      Serial.printf("[RTC] OK: %04d-%02d-%02d %02d:%02d:%02d%s\n",
         rtcNow.year(), rtcNow.month(), rtcNow.day(),
-        rtcNow.hour(), rtcNow.minute(), rtcNow.second());
+        rtcNow.hour(), rtcNow.minute(), rtcNow.second(),
+        rtcTrusted ? "" : " (just set — gap catch-up off this boot)");
     }
   }
 
@@ -2859,7 +3331,7 @@ void setup() {
     // Verify we can actually write
     File test = SD.open("/PPSC_TEST.txt", FILE_WRITE);
     if (test) {
-      test.println("PPSC v24 SD test OK");
+      test.println("PPSC " FW_TAG " SD test OK");
       test.close();
       SD.remove("/PPSC_TEST.txt");
       Serial.println("[SD] Write test PASSED");
@@ -2871,15 +3343,17 @@ void setup() {
     if (sdOk) {
       createLogFile();
       Serial.printf("[SD] Log file: %s\n", logFilename);
-      lastSummaryDay = safeRTCNow().day();
-      loadLastState();  // v25: resume freshness/EMA from before power cycle
     }
   }
+  checkDailySummary();   // v26 P11: sets today's date for the sell counters
+  if (sdOk) loadLastState();  // v25/v26: resume freshness/EMA (+ power-off gap)
 
   for (int i=0;i<GRAPH_POINTS;i++){tempHistory[i]=25.0;freshHistory[i]=100.0;}
 
   float bt=dht.readTemperature();
   if (!isnan(bt)) {prevTemp=bt; currentTemp=bt;}
+  float bh=dht.readHumidity();
+  if (!isnan(bh)) currentHumidity=bh;
 
   // v25: Only reset to fresh-start defaults if no valid state was restored.
   // After a power cycle, loadLastState() has already set EMA, cumulativeDeg,
@@ -2898,6 +3372,7 @@ void setup() {
     gasMultiplier=1.0f; currentVOC=0.0f;
     adp_Ea_eff=DB[selectedProduce].Ea;
     adp_G_voc=adp_H_rh=adp_F_hist=1.0f;
+    for (int i=0;i<GRAPH_POINTS;i++) freshHistory[i]=currentFreshness;
   }
 
   // v21: Precompute LUTs for initial produce
@@ -2905,11 +3380,10 @@ void setup() {
   precompute_lut1D(selectedProduce);
 
   // ═══ v24: ENHANCED STARTUP SELF-TEST ══════════════════
-  // Test 1: Baseline rate at 25°C (same as v23)
-  // Test 2: EMA persistence — verifies λ gives >20min window
-  //   Simulates 1000 steps at T=T_stress+10K, then checks
-  //   how many steps until EMA < 5% of peak (= persistence time)
-  Serial.println("[SELFTEST] v24 parameter validation...");
+  // Test 1: Rate at 35°C must show acceleration
+  // Test 2: EMA persistence — verifies λ gives >15min window
+  // Test 3 (v26): λ time-scaling — one 300-s step must equal 150 × 2-s steps
+  Serial.println("[SELFTEST] v26 parameter validation...");
   int passCount = 0;
   for (int i = 0; i < PRODUCE_COUNT; i++) {
     const Produce& p = DB[i];
@@ -2940,36 +3414,46 @@ void setup() {
     float persistMinutes = stepsTo5pct * 2.0f / 60.0f; // Δt=2s per step
     bool passPersist = (persistMinutes >= 15.0f); // must be ≥15 min
 
-    bool pass = passRate && passPersist;
+    // Test 3 (v26 P6): exactness of λ_eff = λ^(Δt/2 s)
+    float emaSteps = 0.0f;
+    for (int s = 0; s < 150; s++) emaSteps = p.lambda * emaSteps + (1.0f - p.lambda);
+    float lamEff  = powf(p.lambda, 300.0f / EMA_STEP_S);
+    float emaOne  = (1.0f - lamEff);
+    bool passScale = fabsf(emaSteps - emaOne) < 1e-4f;
+
+    bool pass = passRate && passPersist && passScale;
     if (pass) passCount++;
-    Serial.printf("[SELFTEST] %s: rate=%.4f %s | persist=%.1fmin %s\n",
+    Serial.printf("[SELFTEST] %s: rate=%.4f %s | persist=%.1fmin %s | scale %.5f/%.5f %s\n",
       p.name, rate, passRate ? "OK" : "FAIL",
-      persistMinutes, passPersist ? "OK" : "**FAIL**");
+      persistMinutes, passPersist ? "OK" : "**FAIL**",
+      emaSteps, emaOne, passScale ? "OK" : "**FAIL**");
   }
   Serial.printf("[SELFTEST] %d/%d passed\n", passCount, PRODUCE_COUNT);
   if (passCount < PRODUCE_COUNT) {
     Serial.println("[SELFTEST] WARNING: Check lambda/gamma values!");
   } else {
-    Serial.println("[SELFTEST] All produce: baseline + persistence PASS");
+    Serial.println("[SELFTEST] All produce: rate + persistence + scaling PASS");
   }
 
   produceSetTime=lastDegTime=lastSensorRead=lastGraphLog=millis();
   lastBuzzTime=lastDemoUpdate=millis();
+  lastStateSave=millis();
   mlBufIdx=0;
+  if (stateRestored) saveLastState();   // re-stamp after catch-up
 
-  Serial.println("[READY] v25 — watchdog + state resume + NaN guards");
+  Serial.println("[READY] v26 — audited: state CRC + gap catch-up + RGB PWM");
   Serial.printf("[READY] Model: %s\n", MODEL_VERSION);
   Serial.printf("[READY] Physics: %s\n", PHYSICS_MODEL);
   Serial.printf("[READY] Battery: %s\n", USE_BATTERY ? "ENABLED (GPIO35)" : "DISABLED (USB)");
 }
 
 // ═══════════════════════════════════════════════════════
-//  LOOP — v24
+//  LOOP — v26
 // ═══════════════════════════════════════════════════════
 void loop() {
   unsigned long now = millis();
 
-  esp_task_wdt_reset();   // v25: feed watchdog — proves loop is alive
+  if (wdtArmed) esp_task_wdt_reset();   // v25/v26: feed watchdog only if armed
 
   server.handleClient();
   handleMLSerial();
@@ -2983,9 +3467,9 @@ void loop() {
     }
     logToSD();
     checkDailySummary();
-    // v25: persist state every ~30s (15 × 2s) — balances resume accuracy
-    // against SD flash wear. Not every cycle (would burn the card).
-    if (totalLogs % 15 == 0) saveLastState();
+    // v26 P10: persist every 30 s on its own timer (v25 used totalLogs % 15,
+    // which saved every 2 s whenever an SD log append failed).
+    if (now - lastStateSave >= STATE_SAVE_MS) saveLastState();
   }
 
   // Demo mode: fast degradation updates every 300ms

@@ -1,6 +1,5 @@
 import TwinScreen from "@/components/twin/TwinScreen";
 import MetricsBar from "@/components/dashboard/MetricsBar";
-import BrandByline from "@/components/BrandByline";
 import Link from "next/link";
 
 export default function Home() {
@@ -17,7 +16,6 @@ export default function Home() {
               PPSC Fleet Monitor · Live
             </span>
           </div>
-          <BrandByline />
         </div>
         <div className="flex items-center gap-2 sm:gap-6 overflow-x-auto no-scrollbar">
           <span className="hidden font-mono text-[11px] text-slate-400 lg:block">

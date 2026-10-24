@@ -23,6 +23,7 @@ import {
 } from "@/lib/chain";
 import { getProduce } from "@/lib/engine/produce";
 import BlockChainView from "./BlockChainView";
+import LiveCartLedger from "./LiveCartLedger";
 import SettlementCard from "./SettlementCard";
 
 const CHAIN_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CHAIN === "true";
@@ -76,6 +77,8 @@ export default function LedgerApp() {
           decentralized oracle network such as <span className="text-slate-200">Chainlink</span> feeding
           signed sensor data; the same contract logic runs unchanged (see <code className="text-slate-300">/contracts</code>).
         </div>
+
+        <LiveCartLedger />
 
         {/* Shipment context */}
         <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4">

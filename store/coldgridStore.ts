@@ -19,12 +19,14 @@ import {
   type CityEdge,
   type CityNode,
   cityAmbientC,
+  getEdge,
   getNode,
   nodeHoldingTempC,
   planRoute,
 } from "@/lib/city/chennai";
 import {
   SIM_DT_HOURS,
+  type CargoSensorSample,
   type DispatchOptions,
   type Shipment,
   type SimulationState,
@@ -166,12 +168,17 @@ export interface ColdgridState {
   pause: () => void;
   togglePlay: () => void;
   setSpeed: (speed: number) => void;
-  advance: (dtHours?: number) => void;
+  advance: (dtHours?: number, liveSensors?: Readonly<Record<string, CargoSensorSample>>) => void;
   dispatch: (opts: DispatchOptions) => void;
   clearDelivered: () => void;
   resetSim: () => void;
   loadSim: (sim: SimulationState) => void;
   resolveCrisis: (crisisId: string, optionId: string) => void;
+  /** Copilot confirmations. Sell marks a price. Hold and kitchen divert move the truck. */
+  sellMarks: Record<string, { rupees: number; grade: string }>;
+  applyHubHold: (shipmentId: string, hubId: string) => { ok: boolean; reason?: string };
+  applyKitchenDivert: (shipmentId: string, kitchenId: string) => { ok: boolean; reason?: string };
+  markSellNow: (shipmentId: string, rupees: number, grade: string) => void;
 
   // ── Route selection ─────────────────────────────────────────────────────
   setPendingDispatch: (opts: Omit<DispatchOptions, "route"> | null) => void;
@@ -234,6 +241,7 @@ const TRUCK_STATE_RESET = {
   reroutedShipments: {} as Record<string, string[]>,
   heldShipments: {} as Record<string, HeldShipment>,
   hubFeesPaidRupees: 0,
+  sellMarks: {} as Record<string, { rupees: number; grade: string }>,
 };
 
 export const useColdgridStore = create<ColdgridState>((set, get) => ({
@@ -292,13 +300,104 @@ export const useColdgridStore = create<ColdgridState>((set, get) => ({
   togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
   setSpeed: (speed) => set({ speed }),
 
-  advance: (dtHours) =>
+  advance: (dtHours, liveSensors) =>
     set((s) => ({
-      sim: stepSimulation(s.sim, dtHours ?? SIM_DT_HOURS),
+      sim: stepSimulation(s.sim, dtHours ?? SIM_DT_HOURS, liveSensors),
     })),
 
   dispatch: (opts) =>
     set((s) => ({ sim: dispatchShipment(s.sim, opts), pendingDispatch: null })),
+
+  markSellNow: (shipmentId, rupees, grade) =>
+    set((s) => ({ sellMarks: { ...s.sellMarks, [shipmentId]: { rupees, grade } } })),
+
+  applyHubHold: (shipmentId, hubId) => {
+    const sim = get().sim;
+    const ship = sim.shipments.find((s) => s.id === shipmentId);
+    if (!ship || ship.status !== "in-transit" || ship.route.length === 0) {
+      return { ok: false, reason: "That truck is not in transit." };
+    }
+    const edgeId = ship.route[ship.legIndex];
+    if (!edgeId) return { ok: false, reason: "That truck has no current road." };
+    const fromId = getEdge(edgeId).from;
+    const edgeIds = planRoute(fromId, hubId, {
+      closedEdgeIds: sim.closedEdgeIds,
+      hourOfDay: sim.hourOfDay,
+    });
+    if (!edgeIds || edgeIds.length === 0) return { ok: false, reason: "No open road to that hub." };
+    const hub = getNode(hubId);
+    set((s) => ({
+      sim: {
+        ...s.sim,
+        shipments: s.sim.shipments.map((row) =>
+          row.id === shipmentId
+            ? {
+                ...row,
+                destinationId: hubId,
+                route: [...row.route.slice(0, row.legIndex), ...edgeIds],
+                legProgress: 0,
+              }
+            : row
+        ),
+      },
+      reroutedShipments: { ...s.reroutedShipments, [shipmentId]: edgeIds },
+      heldShipments: {
+        ...s.heldShipments,
+        [shipmentId]: {
+          shipmentId,
+          produce: ship.produce,
+          hubId,
+          hubName: hub.name,
+          originalDestId: ship.destinationId,
+          originalDestName: getNode(ship.destinationId).name,
+          qualityAtHold: ship.batch.quality,
+          arrivedClockHours: null,
+          snapshot: null,
+        },
+      },
+    }));
+    get().play();
+    get().transitionTruckState(shipmentId, "REROUTING", {});
+    setTimeout(() => get().transitionTruckState(shipmentId, "MOVING", {}), 800);
+    return { ok: true };
+  },
+
+  applyKitchenDivert: (shipmentId, kitchenId) => {
+    const sim = get().sim;
+    const ship = sim.shipments.find((s) => s.id === shipmentId);
+    if (!ship || ship.status !== "in-transit" || ship.route.length === 0) {
+      return { ok: false, reason: "That truck is not in transit." };
+    }
+    const edgeId = ship.route[ship.legIndex];
+    if (!edgeId) return { ok: false, reason: "That truck has no current road." };
+    const fromId = getEdge(edgeId).from;
+    const edgeIds = planRoute(fromId, kitchenId, {
+      closedEdgeIds: sim.closedEdgeIds,
+      hourOfDay: sim.hourOfDay,
+    });
+    if (!edgeIds || edgeIds.length === 0) return { ok: false, reason: "No open road to that kitchen." };
+    set((s) => ({
+      sim: {
+        ...s.sim,
+        shipments: s.sim.shipments.map((row) =>
+          row.id === shipmentId
+            ? {
+                ...row,
+                destinationId: kitchenId,
+                diverted: true,
+                route: [...row.route.slice(0, row.legIndex), ...edgeIds],
+                legProgress: 0,
+              }
+            : row
+        ),
+      },
+      reroutedShipments: { ...s.reroutedShipments, [shipmentId]: edgeIds },
+    }));
+    get().play();
+    get().transitionTruckState(shipmentId, "REROUTING", {});
+    setTimeout(() => get().transitionTruckState(shipmentId, "MOVING", {}), 800);
+    return { ok: true };
+  },
 
   clearDelivered: () => set((s) => ({ sim: clearDelivered(s.sim) })),
 

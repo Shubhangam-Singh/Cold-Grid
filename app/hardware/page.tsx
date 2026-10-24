@@ -29,8 +29,8 @@ export default function HardwarePage() {
         <p className="mt-3 text-sm leading-relaxed text-slate-400">
           Each truck on the fleet map carries a PPSC unit (DHT22 temperature/humidity + MQ-135 gas).
           Here you can plug in a real cart over serial and watch the same spoilage model turn live
-          cargo temperature into remaining shelf life. Optional and free — with hardware off, this
-          panel shows a synthetic afternoon baseline like every other truck.
+          cargo temperature into remaining shelf life. Optional and free — leave the cart toggle
+          off and this panel shows a synthetic afternoon baseline like every other truck.
         </p>
 
         <div className="mt-6">
@@ -44,13 +44,18 @@ export default function HardwarePage() {
               <code className="text-slate-300">cd bridge &amp;&amp; pip install -r requirements.txt</code>
             </li>
             <li>
-              <code className="text-slate-300">python coldgrid_bridge.py --port COM3</code> (or{" "}
-              <code className="text-slate-300">--mock</code> to test without hardware)
+              <code className="text-slate-300">python coldgrid_bridge.py --port COM12</code> (115200 baud).
+              Use <code className="text-slate-300">--mock</code> with no cart.
             </li>
             <li>
-              In <code className="text-slate-300">.env.local</code>: set{" "}
-              <code className="text-slate-300">NEXT_PUBLIC_ENABLE_HARDWARE=true</code> and{" "}
-              <code className="text-slate-300">NEXT_PUBLIC_WS_URL=ws://localhost:8765</code>, then restart.
+              On this page, turn <span className="text-slate-300">Real PPSC readings</span> on.
+              The fleet Operations panel has the same switch. No restart. While a frame is
+              fresh, the newest truck on the map uses the cart temperature instead of city ambient.
+            </li>
+            <li>
+              Optional: <code className="text-slate-300">NEXT_PUBLIC_ENABLE_HARDWARE=true</code> starts
+              that switch on, and <code className="text-slate-300">NEXT_PUBLIC_WS_URL</code> overrides{" "}
+              <code className="text-slate-300">ws://localhost:8765</code>.
             </li>
           </ol>
         </div>

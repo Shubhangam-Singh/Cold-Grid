@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
+import HardwareBridge from "@/components/hardware/HardwareBridge";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -36,6 +37,7 @@ export default function RootLayout({
       <body
         className={`${dmSans.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >
+        <HardwareBridge />
         {children}
       </body>
     </html>

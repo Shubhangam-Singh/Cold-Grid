@@ -18,6 +18,7 @@ import {
   routeTravelHours,
 } from "@/lib/city/chennai";
 import type { ProduceId } from "@/lib/engine/types";
+import CartToggle from "@/components/hardware/CartToggle";
 
 const PRESETS: { label: string; opts: DispatchOptions }[] = [
   { label: "Fish · Kasimedu → Mylapore", opts: { produce: "fish", fromId: "kasimedu", toId: "mylapore" } },
@@ -96,8 +97,11 @@ export default function SimControls() {
   return (
     <div className="pointer-events-auto flex flex-col min-h-0 w-72 rounded-xl glass-panel p-4 animate-slide-up flex-shrink">
       <div className="flex-1 overflow-y-auto min-h-0 pr-1 -mr-1">
-        <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
-          Operations
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
+            Operations
+          </span>
+          <CartToggle compact />
         </div>
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">

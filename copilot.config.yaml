@@ -1,0 +1,13 @@
+# FROST local copilot. The service always binds 127.0.0.1.
+# Port 8765 is the PPSC cart bridge. Do not use it here.
+name: FROST
+port: 8787
+ollama: http://127.0.0.1:11434
+# CPU-only suggestion. Not pulled on this PC. Override after `ollama pull`.
+model: llama3.2:3b
+modelPulled: false
+embedModel: nomic-embed-text
+temperature: 0.2
+timeoutMs: 8000
+quietFrom: 22
+quietUntil: 7

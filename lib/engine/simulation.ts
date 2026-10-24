@@ -139,6 +139,21 @@ function noise01(seed: number, key: string, tick: number): number {
  * humid; VOC/gas rises with the batch's own degradation (a spoiling load
  * off-gasses) so the G post-multiplier becomes active for at-risk stock.
  */
+/** A measured cargo sample. When present it replaces the synthetic route-ambient feed. */
+export interface CargoSensorSample {
+  T_C: number;
+  RH: number;
+  VOC: number;
+}
+
+function measuredSensors(sample: CargoSensorSample | null | undefined): CargoSensorSample | null {
+  if (!sample) return null;
+  if (!Number.isFinite(sample.T_C) || !Number.isFinite(sample.RH) || !Number.isFinite(sample.VOC)) {
+    return null;
+  }
+  return { T_C: sample.T_C, RH: sample.RH, VOC: sample.VOC };
+}
+
 export function syntheticSensors(args: {
   seed: number;
   key: string;
@@ -171,8 +186,16 @@ interface StepContext {
   closedEdgeIds: string[];
 }
 
-/** Advance a single shipment by one tick. Pure: returns a new Shipment. */
-export function advanceShipment(s: Shipment, ctx: StepContext): Shipment {
+/**
+ * Advance a single shipment by one tick. Pure: returns a new Shipment.
+ * `liveSensors` is the cart probe for this truck. Omit it and the truck
+ * keeps tracking route ambient (or its reefer setpoint).
+ */
+export function advanceShipment(
+  s: Shipment,
+  ctx: StepContext,
+  liveSensors?: CargoSensorSample | null
+): Shipment {
   if (s.status === "delivered" || s.route.length === 0) return s;
 
   // Check for unresolved crisis — truck is stalled
@@ -191,15 +214,19 @@ export function advanceShipment(s: Shipment, ctx: StepContext): Shipment {
     s.transportSetpointC != null ? Math.max(0, routeAmbientC - s.transportSetpointC) : 0;
   const energyKwh =
     s.energyKwh + COOLING_KW_PER_C * liftC * ctx.dtHours * driver.fuelEfficiency;
-  const sensors = syntheticSensors({
-    seed: ctx.seed,
-    key: `${s.id}|${edge.id}`,
-    tick: ctx.tick,
-    baseTempC: baseTemp,
-    baseRHPct: ctx.scenarioBaseRH,
-    profile,
-    batch: s.batch,
-  });
+  // Open trucks otherwise take city/route ambient. A live probe replaces that
+  // sample only; compressor energy still uses the route ambient and setpoint.
+  const sensors =
+    measuredSensors(liveSensors) ??
+    syntheticSensors({
+      seed: ctx.seed,
+      key: `${s.id}|${edge.id}`,
+      tick: ctx.tick,
+      baseTempC: baseTemp,
+      baseRHPct: ctx.scenarioBaseRH,
+      profile,
+      batch: s.batch,
+    });
   const batch = stepBatch(
     s.batch,
     profile,
@@ -370,10 +397,15 @@ export function dispatchShipment(
   };
 }
 
-/** Advance the whole simulation by one tick. Pure: returns a new state. */
+/**
+ * Advance the whole simulation by one tick. Pure: returns a new state.
+ * `liveSensors` keys shipment ids to a cart sample. Trucks absent from the
+ * map stay on the synthetic feed, and omitting the map leaves every truck synthetic.
+ */
 export function stepSimulation(
   state: SimulationState,
-  dtHours: number
+  dtHours: number,
+  liveSensors?: Readonly<Record<string, CargoSensorSample>>
 ): SimulationState {
   const ctx: StepContext = {
     seed: state.seed,
@@ -388,7 +420,7 @@ export function stepSimulation(
   // Advance shipments and check for new crises
   const newCrises: CrisisEvent[] = [];
   const advancedShipments = state.shipments.map((s) => {
-    const advanced = advanceShipment(s, ctx);
+    const advanced = advanceShipment(s, ctx, liveSensors?.[s.id]);
 
     // Check for crisis on leg entry (only once per leg per shipment)
     if (
